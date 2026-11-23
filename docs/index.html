@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ENSIM Trader Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f4f4f1;
+  --surface-1: #fcfcfb;
+  --border: #e2e1dc;
+  --grid: #ecebe6;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #85847f;
+  --series-A: #2a78d6;
+  --series-B: #eb6834;
+  --series-C: #1baf7a;
+  --series-total: #0b0b0b;
+  --good: #0a7d3a;
+  --bad: #c42b2b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-0: #111110;
+    --surface-1: #1a1a19;
+    --border: #2e2e2c;
+    --grid: #262624;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8f8e86;
+    --series-A: #3987e5;
+    --series-B: #d95926;
+    --series-C: #199e70;
+    --series-total: #f0efec;
+    --good: #3fbf6f;
+    --bad: #ef6b6b;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #111110;
+  --surface-1: #1a1a19;
+  --border: #2e2e2c;
+  --grid: #262624;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #8f8e86;
+  --series-A: #3987e5;
+  --series-B: #d95926;
+  --series-C: #199e70;
+  --series-total: #f0efec;
+  --good: #3fbf6f;
+  --bad: #ef6b6b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--surface-0); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 16px; margin: 0 0 2px; }
+.sub { color: var(--text-secondary); margin: 0 0 16px; }
+.muted { color: var(--text-muted); font-size: 12px; }
+.controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin: 12px 0 20px; }
+.controls label { color: var(--text-secondary); font-size: 13px; }
+select, button {
+  font: inherit; color: var(--text-primary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+}
+button { cursor: pointer; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .grid3 { grid-template-columns: 1fr; } }
+.tile .head { display: flex; align-items: center; gap: 8px; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
+.tile .big { font-size: 28px; font-weight: 600; margin: 4px 0; font-variant-numeric: tabular-nums; }
+.tile dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 8px 0 0; font-size: 13px; }
+.tile dt { color: var(--text-secondary); }
+.tile dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.badge { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--border); }
+.up { color: var(--good); } .down { color: var(--bad); }
+.chart-box { position: relative; height: 300px; }
+.chart-box.tall { height: 360px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-secondary); margin: 6px 0 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ln { width: 18px; height: 0; border-top: 2px solid currentColor; display: inline-block; }
+.ln.dash { border-top-style: dashed; } .ln.dot { border-top-style: dotted; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--text-secondary); font-weight: 500; }
+.table-wrap { overflow-x: auto; }
+details summary { cursor: pointer; color: var(--text-secondary); }
+pre { overflow-x: auto; font-size: 12px; max-height: 400px; }
+#err { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <h1>ENSIM Trade Center — Analyse du marché</h1>
+  <p class="sub">Historique de A, B et C, avec pour chacun un modèle <b>tendance linéaire + sinus</b> ajusté sur l'historique et une prévision.
+    <span id="stamp" class="muted"></span></p>
+
+  <div class="controls">
+    <label>Fenêtre affichée
+      <select id="win">
+        <option value="0">Tout l'historique</option>
+        <option value="200">200 derniers ticks</option>
+        <option value="100" selected>100 derniers ticks</option>
+        <option value="50">50 derniers ticks</option>
+      </select>
+    </label>
+    <label>Horizon de prévision
+      <select id="hor">
+        <option value="12">12 ticks</option>
+        <option value="24" selected>24 ticks</option>
+        <option value="48">48 ticks</option>
+        <option value="96">96 ticks</option>
+      </select>
+    </label>
+    <button id="reload">Rafraîchir les données</button>
+    <span id="err"></span>
+  </div>
+
+  <!-- Tuiles de synthèse par produit -->
+  <div class="grid3" id="tiles"></div>
+
+  <!-- Un graphique par produit -->
+  <div class="grid3" id="charts"></div>
+
+  <!-- Comparaison des cycles -->
+  <section class="card">
+    <h2>Comparaison des cycles (tendance retirée)</h2>
+    <p class="muted">Composante sinusoïdale de chaque produit divisée par son amplitude : +1 = sommet du cycle, −1 = creux. Permet de voir quels produits sont en phase ou en opposition, et lequel va bientôt se retourner.</p>
+    <div class="legend" id="lg-cycle"></div>
+    <div class="chart-box"><canvas id="c-cycle"></canvas></div>
+  </section>
+
+  <!-- Tableau du modèle -->
+  <section class="card">
+    <h2>Paramètres du modèle et prévisions</h2>
+    <p class="muted">prix(t) = a + b·t + A·sin(2π·t / P + φ), ajusté par moindres carrés (P recherché par balayage). R² proche de 1 = le modèle explique bien l'historique.</p>
+    <div class="table-wrap"><table id="tbl"></table></div>
+  </section>
+
+  <details class="card">
+    <summary>Données brutes des flux (vérification)</summary>
+    <pre id="raw">Chargement…</pre>
+  </details>
+</main>
+
+<script>
+const MARKET_URL = "https://raw.githubusercontent.com/exofri/ensim-trade-center/refs/heads/main/docs/data/market.json";
+const HOLDINGS_URL = "https://raw.githubusercontent.com/exofri/ensim-trade-center/refs/heads/main/traders/eric-lefebvre/holdings.json";
+
+let market = null, holdings = null, models = {};
+const charts = {};
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (x, d = 2) => Number(x).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+/* ---------- Modèle : y = a + b t + c sin(wt) + d cos(wt) ---------- */
+function solve(M, v) { // Gauss élimination, petit système
+  const n = v.length, A = M.map((r, i) => [...r, v[i]]);
+  for (let i = 0; i < n; i++) {
+    let p = i; for (let k = i + 1; k < n; k++) if (Math.abs(A[k][i]) > Math.abs(A[p][i])) p = k;
+    [A[i], A[p]] = [A[p], A[i]];
+    for (let k = i + 1; k < n; k++) { const f = A[k][i] / A[i][i]; for (let j = i; j <= n; j++) A[k][j] -= f * A[i][j]; }
+  }
+  const x = Array(n).fill(0);
+  for (let i = n - 1; i >= 0; i--) { let s = A[i][n]; for (let j = i + 1; j < n; j++) s -= A[i][j] * x[j]; x[i] = s / A[i][i]; }
+  return x;
+}
+function fitFixedPeriod(y, P) {
+  const w = 2 * Math.PI / P, n = y.length;
+  const XtX = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]], Xty = [0,0,0,0];
+  for (let t = 0; t < n; t++) {
+    const r = [1, t, Math.sin(w * t), Math.cos(w * t)];
+    for (let i = 0; i < 4; i++) { Xty[i] += r[i] * y[t]; for (let j = 0; j < 4; j++) XtX[i][j] += r[i] * r[j]; }
+  }
+  const c = solve(XtX, Xty);
+  let sse = 0;
+  for (let t = 0; t < n; t++) { const e = y[t] - (c[0] + c[1]*t + c[2]*Math.sin(w*t) + c[3]*Math.cos(w*t)); sse += e * e; }
+  return { c, sse, P, w };
+}
+function fitModel(y) {
+  const n = y.length;
+  if (n < 12) return null;
+  let best = null;
+  const maxP = Math.min(300, n * 0.9);
+  for (let P = 6; P <= maxP; P += 0.25) {
+    const f = fitFixedPeriod(y, P);
+    if (!best || f.sse < best.sse) best = f;
+  }
+  const [a, b, s, co] = best.c;
+  const amp = Math.hypot(s, co), phi = Math.atan2(co, s); // s sin + co cos = amp sin(wt + phi)
+  const mean = y.reduce((p, q) => p + q, 0) / n;
+  const sst = y.reduce((p, q) => p + (q - mean) ** 2, 0);
+  const sigma = Math.sqrt(best.sse / Math.max(1, n - 5));
+  const m = { a, b, amp, phi, w: best.w, P: best.P, r2: 1 - best.sse / sst, sigma, n };
+  m.f = t => a + b * t + amp * Math.sin(m.w * t + phi);
+  m.trend = t => a + b * t;
+  m.cyc = t => Math.sin(m.w * t + phi);
+  return m;
+}
+// Ticks restants avant le prochain sommet/creux du cycle
+function nextTurn(m, t0) {
+  const TAU = 2 * Math.PI, ph = ((m.w * t0 + m.phi) % TAU + TAU) % TAU;
+  const toPeak = ((Math.PI / 2 - ph) % TAU + TAU) % TAU / m.w;
+  const toTrough = ((3 * Math.PI / 2 - ph) % TAU + TAU) % TAU / m.w;
+  return { toPeak, toTrough, rising: Math.cos(ph) > 0, pos: Math.sin(ph) };
+}
+
+/* ---------- Chargement ---------- */
+async function load() {
+  document.getElementById("err").textContent = "";
+  try {
+    const bust = "?t=" + Date.now();
+    [market, holdings] = await Promise.all([
+      fetch(MARKET_URL + bust).then(r => r.json()),
+      fetch(HOLDINGS_URL + bust).then(r => r.json()).catch(() => null),
+    ]);
+    document.getElementById("raw").textContent =
+      "MARKET (" + market.history.length + " ticks) — dernier :\n" + JSON.stringify(market.history.at(-1), null, 2) +
+      "\n\nHOLDINGS:\n" + JSON.stringify(holdings, null, 2);
+    document.getElementById("stamp").textContent = "Données générées le " + new Date(market.generated_at).toLocaleString("fr-FR") + " · " + market.history.length + " ticks.";
+    models = {};
+    for (const p of market.products) models[p] = fitModel(market.history.map(r => r[p]));
+    render();
+  } catch (e) {
+    document.getElementById("err").textContent = "Impossible de charger les données : " + e;
+  }
+}
+
+/* ---------- Rendu ---------- */
+function baseOptions(yTitle) {
+  const grid = css("--grid"), txt = css("--text-secondary");
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        filter: i => i.raw && i.raw.y != null && !i.dataset._hideTip,
+        callbacks: {
+          title: it => "Tick " + Math.round(it[0].parsed.x),
+          label: i => i.dataset.label + " : " + fmt(i.parsed.y, yTitle === "€" ? 0 : 3),
+        },
+      },
+    },
+    scales: {
+      x: { type: "linear", grid: { color: grid }, ticks: { color: txt, maxTicksLimit: 8 }, title: { display: true, text: "tick", color: txt } },
+      y: { grid: { color: grid }, ticks: { color: txt }, title: { display: !!yTitle, text: yTitle, color: txt } },
+    },
+  };
+}
+function mkChart(id, datasets, opts) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), { type: "line", data: { datasets }, options: opts });
+}
+const line = (label, data, color, extra = {}) => ({
+  label, data, borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0, ...extra,
+});
+function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
+
+function render() {
+  const H = market.history, N = H.length, lastT = N - 1;
+  const win = +document.getElementById("win").value, hor = +document.getElementById("hor").value;
+  const from = win ? Math.max(0, N - win) : 0;
+  const products = market.products;
+  const col = p => css("--series-" + p);
+
+  /* Tuiles */
+  const tiles = document.getElementById("tiles"); tiles.innerHTML = "";
+  for (const p of products) {
+    const m = models[p], price = H[lastT][p];
+    if (!m) { tiles.insertAdjacentHTML("beforeend", `<div class="card tile">${p} : historique insuffisant</div>`); continue; }
+    const turn = nextTurn(m, lastT);
+    const fc = m.f(lastT + hor), delta = (fc - price) / price * 100;
+    const trendPct = m.b * 24 / m.trend(lastT) * 100;
+    const trendTxt = Math.abs(trendPct) < 0.3 ? "≈ plate" : (trendPct > 0 ? "haussière" : "baissière");
+    tiles.insertAdjacentHTML("beforeend", `
+      <div class="card tile">
+        <div class="head"><span class="swatch" style="background:${col(p)}"></span><h2>Produit ${p}</h2>
+          <span class="badge ${turn.rising ? "up" : "down"}">${turn.rising ? "▲ cycle montant" : "▼ cycle descendant"}</span></div>
+        <div class="big">${fmt(price, 3)}</div>
+        <dl>
+          <dt>Tendance de fond</dt><dd class="${m.b >= 0 ? "up" : "down"}">${trendTxt} (${trendPct >= 0 ? "+" : ""}${fmt(trendPct, 2)} % / 24 ticks)</dd>
+          <dt>Période du cycle</dt><dd>${fmt(m.P, 1)} ticks</dd>
+          <dt>Amplitude</dt><dd>± ${fmt(m.amp, 3)} (± ${fmt(m.amp / m.trend(lastT) * 100, 1)} %)</dd>
+          <dt>Position dans le cycle</dt><dd>${fmt(turn.pos * 100, 0)} % ${turn.pos > 0.7 ? "(proche sommet)" : turn.pos < -0.7 ? "(proche creux)" : ""}</dd>
+          <dt>Prochain sommet</dt><dd>dans ${fmt(turn.toPeak, 0)} ticks</dd>
+          <dt>Prochain creux</dt><dd>dans ${fmt(turn.toTrough, 0)} ticks</dd>
+          <dt>Prévision à +${hor}</dt><dd class="${delta >= 0 ? "up" : "down"}">${fmt(fc, 3)} (${delta >= 0 ? "+" : ""}${fmt(delta, 1)} %)</dd>
+          <dt>Qualité du modèle</dt><dd>R² = ${fmt(m.r2, 3)}</dd>
+        </dl>
+      </div>`);
+  }
+
+  /* Graphiques par produit */
+  const box = document.getElementById("charts");
+  if (!box.children.length) for (const p of products) box.insertAdjacentHTML("beforeend", `
+    <section class="card"><h2><span class="swatch" style="background:var(--series-${p})"></span> Produit ${p}</h2>
+      <div class="legend" style="color:var(--series-${p})">
+        <span><i class="ln"></i><b style="color:var(--text-secondary);font-weight:400">Prix observé</b></span>
+        <span><i class="ln dash"></i><b style="color:var(--text-secondary);font-weight:400">Modèle / prévision</b></span>
+        <span><i class="ln dot"></i><b style="color:var(--text-secondary);font-weight:400">Tendance</b></span>
+      </div>
+      <div class="chart-box"><canvas id="c-${p}"></canvas></div></section>`);
+  for (const p of products) {
+    const m = models[p], c = col(p);
+    const obs = [], fit = [], trend = [], fut = [], hi = [], lo = [];
+    for (let t = from; t < N; t++) obs.push({ x: t, y: H[t][p] });
+    if (m) {
+      for (let t = from; t <= lastT + hor; t++) trend.push({ x: t, y: m.trend(t) });
+      for (let t = from; t <= lastT; t++) fit.push({ x: t, y: m.f(t) });
+      for (let t = lastT; t <= lastT + hor; t++) {
+        fut.push({ x: t, y: m.f(t) });
+        hi.push({ x: t, y: m.f(t) + 2 * m.sigma }); lo.push({ x: t, y: m.f(t) - 2 * m.sigma });
+      }
+    }
+    mkChart("c-" + p, [
+      line("Prix", obs, c),
+      line("Modèle", fit, hexA(c, 0.55), { borderDash: [5, 4], borderWidth: 1.5 }),
+      line("Prévision", fut, c, { borderDash: [5, 4] }),
+      line("Borne haute (2σ)", hi, "transparent", { _hideTip: true, pointHoverRadius: 0 }),
+      line("Intervalle 2σ", lo, "transparent", { fill: "-1", backgroundColor: hexA(c, 0.15), _hideTip: true, pointHoverRadius: 0 }),
+      line("Tendance", trend, hexA(c, 0.7), { borderDash: [1, 4], borderWidth: 2 }),
+    ], baseOptions("prix"));
+  }
+
+  /* Cycles comparés */
+  const lgC = document.getElementById("lg-cycle");
+  lgC.innerHTML = products.map(p => `<span><span class="swatch" style="background:${col(p)}"></span>${p} (P = ${models[p] ? fmt(models[p].P, 0) : "?"})</span>`).join("")
+    + `<span><i class="ln dash"></i>partie future = prévision</span>`;
+  const cycDs = [];
+  for (const p of products) {
+    const m = models[p]; if (!m) continue;
+    const past = [], futr = [];
+    for (let t = from; t <= lastT; t++) past.push({ x: t, y: m.cyc(t) });
+    for (let t = lastT; t <= lastT + hor; t++) futr.push({ x: t, y: m.cyc(t) });
+    cycDs.push(line(p, past, col(p)), line(p + " (prévu)", futr, col(p), { borderDash: [5, 4] }));
+  }
+  const oc = baseOptions("position dans le cycle");
+  oc.scales.y.min = -1.1; oc.scales.y.max = 1.1;
+  oc.plugins.tooltip.callbacks.label = i => i.dataset.label + " : " + fmt(i.parsed.y * 100, 0) + " %";
+  mkChart("c-cycle", cycDs, oc);
+
+  /* Tableau */
+  let rows = `<tr><th>Produit</th><th>Prix actuel</th><th>a (niveau)</th><th>b (pente/tick)</th><th>Période P</th><th>Amplitude A</th><th>R²</th><th>σ résidus</th>`
+    + [6, 12, 24, 48].map(h => `<th>Prévu +${h}</th>`).join("") + `</tr>`;
+  for (const p of products) {
+    const m = models[p]; if (!m) continue;
+    rows += `<tr><td><span class="swatch" style="background:${col(p)}"></span> ${p}</td><td>${fmt(H[lastT][p], 3)}</td><td>${fmt(m.a, 3)}</td>
+      <td>${m.b >= 0 ? "+" : ""}${fmt(m.b, 4)}</td><td>${fmt(m.P, 2)}</td><td>${fmt(m.amp, 3)}</td><td>${fmt(m.r2, 3)}</td><td>${fmt(m.sigma, 3)}</td>`
+      + [6, 12, 24, 48].map(h => `<td>${fmt(m.f(lastT + h), 3)}</td>`).join("") + `</tr>`;
+  }
+  document.getElementById("tbl").innerHTML = rows;
+}
+
+document.getElementById("win").addEventListener("change", () => market && render());
+document.getElementById("hor").addEventListener("change", () => market && render());
+document.getElementById("reload").addEventListener("click", load);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => market && render());
+load();
+</script>
+</body>
+</html>
