@@ -21,6 +21,7 @@
   --series-total: #0b0b0b;
   --good: #0a7d3a;
   --bad: #c42b2b;
+  --shade: rgba(0, 0, 0, 0.04);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -38,6 +39,7 @@
     --series-total: #f0efec;
     --good: #3fbf6f;
     --bad: #ef6b6b;
+    --shade: rgba(255, 255, 255, 0.05);
   }
 }
 :root[data-theme="dark"] {
@@ -55,6 +57,7 @@
   --series-total: #f0efec;
   --good: #3fbf6f;
   --bad: #ef6b6b;
+  --shade: rgba(255, 255, 255, 0.05);
 }
 * { box-sizing: border-box; }
 body {
@@ -68,103 +71,141 @@ h2 { font-size: 16px; margin: 0 0 2px; }
 .muted { color: var(--text-muted); font-size: 12px; }
 .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin: 12px 0 20px; }
 .controls label { color: var(--text-secondary); font-size: 13px; }
-select, button {
+select, button, input[type="number"] {
   font: inherit; color: var(--text-primary); background: var(--surface-1);
   border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
 }
 button { cursor: pointer; }
+button:disabled { opacity: .6; cursor: wait; }
 .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-@media (max-width: 900px) { .grid3 { grid-template-columns: 1fr; } }
-.tile .head { display: flex; align-items: center; gap: 8px; }
 .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
-.tile .big { font-size: 28px; font-weight: 600; margin: 4px 0; font-variant-numeric: tabular-nums; }
-.tile dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 8px 0 0; font-size: 13px; }
-.tile dt { color: var(--text-secondary); }
-.tile dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-.badge { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--border); }
+.badge { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--border); white-space: nowrap; }
 .up { color: var(--good); } .down { color: var(--bad); }
 .chart-box { position: relative; height: 300px; }
-.chart-box.tall { height: 360px; }
+.chart-box.tall { height: 380px; }
 .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-secondary); margin: 6px 0 8px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .ln { width: 18px; height: 0; border-top: 2px solid currentColor; display: inline-block; }
 .ln.dash { border-top-style: dashed; } .ln.dot { border-top-style: dotted; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; vertical-align: top; }
 th:first-child, td:first-child { text-align: left; }
+td.reason, th.reason { text-align: left; }
 th { color: var(--text-secondary); font-weight: 500; }
 .table-wrap { overflow-x: auto; }
-details summary { cursor: pointer; color: var(--text-secondary); }
-pre { overflow-x: auto; font-size: 12px; max-height: 400px; }
 #err { color: var(--bad); }
+.chart-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-bottom: 4px; }
+/* Décision */
+.decision { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 8px 0 12px; }
+@media (max-width: 700px) { .decision { grid-template-columns: 1fr; } }
+.dec { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 16px; }
+.dec .p { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.dec .v { font-size: 40px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.dec .a { font-size: 13px; color: var(--text-secondary); }
+.section-title { font-size: 18px; margin: 24px 0 8px; }
+.nowrap { white-space: nowrap; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 16px; }
+.tabs button { border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0; background: transparent; padding: 8px 16px; color: var(--text-secondary); margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { background: var(--surface-1); border-color: var(--border); color: var(--text-primary); font-weight: 600; }
+.gauge { position: relative; display: inline-block; width: 90px; height: 6px; border-radius: 3px; background: var(--grid); vertical-align: middle; margin: 0 6px; }
+.gauge i { position: absolute; top: -3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--text-primary); border: 2px solid var(--surface-1); }
 </style>
 </head>
 <body>
 <main>
-  <h1>ENSIM Trade Center — Analyse du marché</h1>
-  <p class="sub">Historique de A, B et C, avec pour chacun un modèle <b>tendance linéaire + sinus</b> ajusté sur l'historique et une prévision.
-    <span id="stamp" class="muted"></span></p>
-
-  <div class="controls">
-    <label>Fenêtre affichée
-      <select id="win">
-        <option value="0">Tout l'historique</option>
-        <option value="200">200 derniers ticks</option>
-        <option value="100" selected>100 derniers ticks</option>
-        <option value="50">50 derniers ticks</option>
-      </select>
-    </label>
-    <label>Horizon de prévision
-      <select id="hor">
-        <option value="12">12 ticks</option>
-        <option value="24" selected>24 ticks</option>
-        <option value="48">48 ticks</option>
-        <option value="96">96 ticks</option>
-      </select>
-    </label>
+  <h1>ENSIM Trade Center — Décision</h1>
+  <p class="sub"><span id="stamp" class="muted"></span></p>
+  <div class="controls" style="margin-top:0">
     <button id="reload">Rafraîchir les données</button>
     <span id="err"></span>
   </div>
 
-  <!-- Tuiles de synthèse par produit -->
-  <div class="grid3" id="tiles"></div>
+  <div class="tabs" role="tablist">
+    <button role="tab" data-tab="main" aria-selected="true">Décision</button>
+    <button role="tab" data-tab="sim" aria-selected="false">Simulations</button>
+  </div>
 
-  <!-- Un graphique par produit -->
-  <div class="grid3" id="charts"></div>
-
-  <!-- Comparaison des cycles -->
+  <div id="tab-main">
+  <!-- 1. Décision actuelle -->
   <section class="card">
-    <h2>Comparaison des cycles (tendance retirée)</h2>
-    <p class="muted">Composante sinusoïdale de chaque produit divisée par son amplitude : +1 = sommet du cycle, −1 = creux. Permet de voir quels produits sont en phase ou en opposition, et lequel va bientôt se retourner.</p>
-    <div class="legend" id="lg-cycle"></div>
-    <div class="chart-box"><canvas id="c-cycle"></canvas></div>
+    <h2>Décision actuelle (prochain tick)</h2>
+    <div class="decision" id="decision"><span class="muted">Calcul en cours…</span></div>
+    <p class="muted" id="dec-note" style="margin:0 0 12px"></p>
+    <div class="table-wrap"><table id="justif"></table></div>
   </section>
 
-  <!-- Tableau du modèle -->
+  <!-- 2. Cours du marché -->
+  <h2 class="section-title">Cours du marché</h2>
   <section class="card">
-    <h2>Paramètres du modèle et prévisions</h2>
-    <p class="muted">prix(t) = a + b·t + A·sin(2π·t / P + φ), ajusté par moindres carrés (P recherché par balayage). R² proche de 1 = le modèle explique bien l'historique.</p>
-    <div class="table-wrap"><table id="tbl"></table></div>
+    <div class="controls" style="margin:0 0 8px">
+      <label>Produit
+        <select id="prod" autocomplete="off">
+          <option value="ABC" selected>ABC</option>
+          <option value="A">A</option>
+          <option value="B">B</option>
+          <option value="C">C</option>
+        </select>
+      </label>
+      <label>Fenêtre affichée
+        <select id="win" autocomplete="off">
+          <option value="0" selected>Depuis le tick 0</option>
+          <option value="200">200 derniers ticks</option>
+          <option value="100">100 derniers ticks</option>
+          <option value="50">50 derniers ticks</option>
+        </select>
+      </label>
+      <label>Horizon de prévision
+        <select id="hor" autocomplete="off">
+          <option value="12">12 ticks</option>
+          <option value="24" selected>24 ticks</option>
+          <option value="48">48 ticks</option>
+          <option value="96">96 ticks</option>
+        </select>
+      </label>
+    </div>
+    <div class="legend" id="lg-main"></div>
+    <div class="chart-box tall"><canvas id="c-main"></canvas></div>
   </section>
 
-  <details class="card">
-    <summary>Données brutes des flux (vérification)</summary>
-    <pre id="raw">Chargement…</pre>
-  </details>
+  </div>
+
+  <!-- Onglet Simulations -->
+  <div id="tab-sim" hidden>
+  <section class="card">
+    <div class="controls" style="margin:0">
+      <label>Durée simulée
+        <input id="sim-hor" type="range" autocomplete="off" min="96" max="960" step="96" value="480" style="vertical-align:middle;width:220px">
+        <b id="sim-hor-val">5 blocs · 480 ticks</b>
+      </label>
+      <button id="sim-opt">Trouver les meilleurs seuils</button>
+      <span class="muted" id="sim-opt-res"></span>
+    </div>
+    <div class="table-wrap" id="sim-blocks" style="margin-top:8px"></div>
+  </section>
+  <section class="card">
+    <div class="chart-head"><h2>Total (A + B + C)</h2></div>
+    <p class="muted" id="sim-sum-total" style="margin:0 0 4px"></p>
+    <div class="chart-box tall"><canvas id="c-sim-total"></canvas></div>
+  </section>
+  <div id="sim-charts"></div>
+  </div>
 </main>
 
 <script>
 const MARKET_URL = "https://raw.githubusercontent.com/exofri/ensim-trade-center/refs/heads/main/docs/data/market.json";
 const HOLDINGS_URL = "https://raw.githubusercontent.com/exofri/ensim-trade-center/refs/heads/main/traders/eric-lefebvre/holdings.json";
+const DECISION_URL = "https://raw.githubusercontent.com/eric-lefebvre/ensim-trader-eric-lefebvre/main/decision.json";
+// Seuils par bloc calculés par le workflow (scripts/algorithm.py) au dernier tick
+const STRATEGY_URL = "https://raw.githubusercontent.com/eric-lefebvre/ensim-trader-eric-lefebvre/main/docs/data/strategy.json";
 
-let market = null, holdings = null, models = {};
+let market = null, holdings = null, published = null, strategy = null, models = {};
 const charts = {};
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmt = (x, d = 2) => Number(x).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtSig = v => (v > 0 ? "+" : v < 0 ? "−" : "") + Number(Math.abs(v)).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
 
-/* ---------- Modèle : y = a + b t + c sin(wt) + d cos(wt) ---------- */
-function solve(M, v) { // Gauss élimination, petit système
+/* ---------- Modèle ---------- */
+function solve(M, v) { // élimination de Gauss, petit système
   const n = v.length, A = M.map((r, i) => [...r, v[i]]);
   for (let i = 0; i < n; i++) {
     let p = i; for (let k = i + 1; k < n; k++) if (Math.abs(A[k][i]) > Math.abs(A[p][i])) p = k;
@@ -187,6 +228,9 @@ function fitFixedPeriod(y, P) {
   for (let t = 0; t < n; t++) { const e = y[t] - (c[0] + c[1]*t + c[2]*Math.sin(w*t) + c[3]*Math.cos(w*t)); sse += e * e; }
   return { c, sse, P, w };
 }
+// Forme de prix utilisée par le marché (scripts/market_tick.py de l'organisateur, paramètres secrets) :
+//   prix(t) = (niveau + dérive·t) × (1 + k·sin(2πt/P + φ)), plancher 0,01
+// P est trouvé par balayage ; niveau, dérive, k et φ par moindres carrés alternés.
 function fitModel(y) {
   const n = y.length;
   if (n < 12) return null;
@@ -196,47 +240,224 @@ function fitModel(y) {
     const f = fitFixedPeriod(y, P);
     if (!best || f.sse < best.sse) best = f;
   }
-  const [a, b, s, co] = best.c;
-  const amp = Math.hypot(s, co), phi = Math.atan2(co, s); // s sin + co cos = amp sin(wt + phi)
-  const mean = y.reduce((p, q) => p + q, 0) / n;
-  const sst = y.reduce((p, q) => p + (q - mean) ** 2, 0);
-  const sigma = Math.sqrt(best.sse / Math.max(1, n - 5));
-  const m = { a, b, amp, phi, w: best.w, P: best.P, r2: 1 - best.sse / sst, sigma, n };
-  m.f = t => a + b * t + amp * Math.sin(m.w * t + phi);
-  m.trend = t => a + b * t;
-  m.cyc = t => Math.sin(m.w * t + phi);
+  const P = best.P, w = best.w;
+  let a = best.c[0], b = best.c[1], ks = 0, kc = 0;
+  for (let it = 0; it < 30; it++) {
+    let Sss = 0, Scc = 0, Ssc = 0, Srs = 0, Src = 0;
+    for (let t = 0; t < n; t++) {
+      const L = a + b * t, r = y[t] / L - 1, si = Math.sin(w * t), co = Math.cos(w * t);
+      Sss += si * si; Scc += co * co; Ssc += si * co; Srs += r * si; Src += r * co;
+    }
+    [ks, kc] = solve([[Sss, Ssc], [Ssc, Scc]], [Srs, Src]);
+    let Sgg = 0, Sgt = 0, Stt = 0, Syg = 0, Syt = 0;
+    for (let t = 0; t < n; t++) {
+      const g = 1 + ks * Math.sin(w * t) + kc * Math.cos(w * t);
+      Sgg += g * g; Sgt += t * g * g; Stt += t * t * g * g; Syg += y[t] * g; Syt += y[t] * t * g;
+    }
+    [a, b] = solve([[Sgg, Sgt], [Sgt, Stt]], [Syg, Syt]);
+  }
+  const k = Math.hypot(ks, kc), phi = Math.atan2(kc, ks);
+  const m = { a, b, k, P, w, phi, n };
+  m.trend = t => Math.max(a + b * t, 0);
+  m.f = t => Math.max((a + b * t) * (1 + k * Math.sin(w * t + phi)), 0.01);
+  m.zeroT = b < 0 ? -a / b : null; // index où le niveau atteint 0 (prix au plancher)
+  let sse = 0;
+  for (let t = 0; t < n; t++) sse += (y[t] - m.f(t)) ** 2;
+  m.sigma = Math.sqrt(sse / Math.max(1, n - 6));
   return m;
 }
-// Ticks restants avant le prochain sommet/creux du cycle
+// Phase du cycle au tick t0 : montant / descendant, ticks avant le prochain sommet / creux
 function nextTurn(m, t0) {
   const TAU = 2 * Math.PI, ph = ((m.w * t0 + m.phi) % TAU + TAU) % TAU;
-  const toPeak = ((Math.PI / 2 - ph) % TAU + TAU) % TAU / m.w;
-  const toTrough = ((3 * Math.PI / 2 - ph) % TAU + TAU) % TAU / m.w;
-  return { toPeak, toTrough, rising: Math.cos(ph) > 0, pos: Math.sin(ph) };
+  return {
+    rising: Math.cos(ph) > 0,
+    toPeak: ((Math.PI / 2 - ph) % TAU + TAU) % TAU / m.w,
+    toTrough: ((3 * Math.PI / 2 - ph) % TAU + TAU) % TAU / m.w,
+  };
 }
 
-/* ---------- Chargement ---------- */
-async function load() {
-  document.getElementById("err").textContent = "";
-  try {
-    const bust = "?t=" + Date.now();
-    [market, holdings] = await Promise.all([
-      fetch(MARKET_URL + bust).then(r => r.json()),
-      fetch(HOLDINGS_URL + bust).then(r => r.json()).catch(() => null),
-    ]);
-    document.getElementById("raw").textContent =
-      "MARKET (" + market.history.length + " ticks) — dernier :\n" + JSON.stringify(market.history.at(-1), null, 2) +
-      "\n\nHOLDINGS:\n" + JSON.stringify(holdings, null, 2);
-    document.getElementById("stamp").textContent = "Données générées le " + new Date(market.generated_at).toLocaleString("fr-FR") + " · " + market.history.length + " ticks.";
-    models = {};
-    for (const p of market.products) models[p] = fitModel(market.history.map(r => r[p]));
-    render();
-  } catch (e) {
-    document.getElementById("err").textContent = "Impossible de charger les données : " + e;
+/* ---------- Règle de décision et simulation ----------
+   Trois lignes qui suivent la tendance, qu'elle monte ou qu'elle descende :
+     moyenne = tendance L(t) ; moyenne basse = L(t)·(1−k) (creux) ; moyenne haute = L(t)·(1+k) (sommets)
+   Seuil s (0..1) = part du chemin entre la moyenne basse (ou haute) et la moyenne :
+     cours ≤ basse + s_achat·(moyenne − basse)  → achat de 100 unités (limité par l'argent restant)
+     cours ≥ haute − s_vente·(haute − moyenne)  → vente de 100 unités (limitée par le stock)
+   Les 3 produits partagent le même argent, dans l'ordre du marché : A puis B puis C à chaque tick. */
+function zones(m, t, th) {
+  const tr = m.trend(t), low = tr * (1 - m.k), high = tr * (1 + m.k);
+  return { tr, buyAt: low + th.b * (tr - low), sellAt: high - th.s * (high - tr) };
+}
+function precompute(ps, t0, T) {
+  const pre = {};
+  for (const p of ps) {
+    const m = models[p], o = { pr: new Float64Array(T + 1), tr: new Float64Array(T + 1), low: new Float64Array(T + 1), high: new Float64Array(T + 1) };
+    for (let i = 1; i <= T; i++) { const tr = m.trend(t0 + i); o.pr[i] = m.f(t0 + i); o.tr[i] = tr; o.low[i] = tr * (1 - m.k); o.high[i] = tr * (1 + m.k); }
+    pre[p] = o;
   }
+  return pre;
+}
+// th = seuils fixes { A: {b, s}, ... } OU plan par blocs : tableau de seuils avec plan.L = longueur d'un bloc
+// (le dernier bloc s'applique au-delà de la fin du plan).
+const thAtFn = th => Array.isArray(th) ? (i => th[Math.min(th.length - 1, Math.floor((Math.max(i, 1) - 1) / th.L))]) : (() => th);
+function simulateJoint(ps, th, t0, money0, units0, T, withCurve = true, pre = precompute(ps, t0, T)) {
+  const units = { ...units0 }, thAt = thAtFn(th);
+  let money = money0;
+  const total = withCurve ? [{ x: 0, y: money + ps.reduce((acc, p) => acc + units[p] * market.history[t0][p], 0) }] : null;
+  const stock = withCurve ? Object.fromEntries(ps.map(p => [p, [{ x: 0, y: units[p] }]])) : null;
+  let val = 0;
+  for (let i = 1; i <= T; i++) {
+    val = 0;
+    const thi = thAt(i);
+    for (const p of ps) {
+      const d = pre[p], pr = d.pr[i], tr = d.tr[i], low = d.low[i], high = d.high[i];
+      if (tr > 0 && pr <= low + thi[p].b * (tr - low)) {
+        const q = Math.min(100, Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q;
+      } else if (tr > 0 && pr >= high - thi[p].s * (high - tr)) {
+        const q = Math.min(100, units[p]); money += q * pr; units[p] -= q;
+      }
+      val += units[p] * pr;
+      if (withCurve) stock[p].push({ x: i, y: units[p] });
+    }
+    if (withCurve) total.push({ x: i, y: money + val });
+  }
+  return { total, stock, money, units, value: money + val };
+}
+// Recherche des meilleurs seuils sur T ticks (objectif : valeur totale finale, argent partagé).
+// 1) chaque produit seul : 21 × 21 paires (achat, vente) de 0 à 100 % par pas de 5 % ;
+// 2) puis chaque produit à tour de rôle, les autres fixés, jusqu'à ce que plus rien ne s'améliore (max 4 tours).
+// Horizon d'optimisation : un nombre entier de cycles de TOUS les produits (multiple commun des périodes),
+// le plus proche de la durée demandée. Ainsi la simulation finit au même point de chaque cycle qu'au départ
+// (commencée sur une bosse -> finit sur une bosse) et les seuils ne dépendent pas de l'endroit où elle s'arrête.
+// Tranche fixée à 96 ticks (1 cycle de B, 2 de A, 4 de C), comme BLOCK_TICKS dans scripts/algorithm.py.
+// L'horizon de recherche est arrondi à un nombre entier de tranches.
+const BLOCK_TICKS = 96;
+function cycleHorizon(T) {
+  return { T: Math.max(BLOCK_TICKS, Math.round(T / BLOCK_TICKS) * BLOCK_TICKS), L: BLOCK_TICKS, exact: true };
+}
+function optimizeThresholds(T) {
+  const lastT = market.history.length - 1, ps = productsOk();
+  const money0 = startMoney(), units0 = startUnits(ps);
+  const grid = Array.from({ length: 21 }, (_, i) => i * 0.05);
+  const pre = precompute(ps, lastT, T);
+  const th = {};
+  for (const p of ps) {
+    let best = null;
+    for (const b of grid) for (const s of grid) {
+      const v = simulateJoint([p], { [p]: { b, s } }, lastT, money0, { [p]: units0[p] }, T, false, pre).value;
+      if (!best || v > best.v + 1e-9) best = { v, b, s };
+    }
+    th[p] = { b: best.b, s: best.s };
+  }
+  let bestV = simulateJoint(ps, th, lastT, money0, units0, T, false, pre).value;
+  for (let round = 0; round < 4; round++) {
+    let improved = false;
+    for (const p of ps) for (const b of grid) for (const s of grid) {
+      const trial = { ...th, [p]: { b, s } };
+      const v = simulateJoint(ps, trial, lastT, money0, units0, T, false, pre).value;
+      if (v > bestV + 1e-6) { bestV = v; th[p] = { b, s }; improved = true; }
+    }
+    if (!improved) break;
+  }
+  return { th, value: bestV };
 }
 
-/* ---------- Rendu ---------- */
+// Optimisation par blocs : la durée (nombre entier de cycles) est découpée en blocs d'un multiple commun
+// des périodes (ex. 96 ticks = 1 cycle de B, 2 de A, 4 de C). Chaque bloc a ses propres seuils, car la
+// meilleure stratégie change avec le temps (peu d'argent au début, C qui s'effondre, B de plus en plus cher).
+// Départ : les meilleurs seuils fixes ; puis chaque (bloc, produit) à tour de rôle, en testant les 441 paires,
+// tant que la valeur finale s'améliore (max 3 tours). L'état au début du bloc k ne dépend que des blocs
+// précédents : il est calculé une fois, et seuls les ticks à partir du bloc k sont resimulés.
+function simFrom(ps, plan, pre, i0, money, units0, T) {
+  const units = { ...units0 }, thAt = thAtFn(plan);
+  let val = 0;
+  for (let i = i0 + 1; i <= T; i++) {
+    val = 0;
+    const thi = thAt(i);
+    for (const p of ps) {
+      const d = pre[p], pr = d.pr[i], tr = d.tr[i], low = d.low[i], high = d.high[i];
+      if (tr > 0 && pr <= low + thi[p].b * (tr - low)) { const q = Math.min(100, Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q; }
+      else if (tr > 0 && pr >= high - thi[p].s * (high - tr)) { const q = Math.min(100, units[p]); money += q * pr; units[p] -= q; }
+      val += units[p] * pr;
+    }
+  }
+  return { money, units, value: money + val };
+}
+function optimizeBlocks(T) {
+  const lastT = market.history.length - 1, ps = productsOk();
+  const hz = cycleHorizon(T), Ttot = hz.T, L = hz.exact ? hz.L : Ttot, nb = Math.max(1, Math.round(Ttot / L));
+  const money0 = startMoney(), units0 = startUnits(ps);
+  const grid = Array.from({ length: 21 }, (_, i) => i * 0.05);
+  const pre = precompute(ps, lastT, Ttot);
+  const fixed = optimizeThresholds(Ttot);
+  const plan = Array.from({ length: nb }, () => JSON.parse(JSON.stringify(fixed.th)));
+  plan.L = L;
+  let best = simFrom(ps, plan, pre, 0, money0, units0, Ttot).value;
+  for (let round = 0; round < 3; round++) {
+    let improved = false;
+    for (let k = 0; k < nb; k++) {
+      const st = simFrom(ps, plan, pre, 0, money0, units0, k * L); // état au début du bloc k
+      for (const p of ps) {
+        let keep = plan[k][p];
+        for (const b of grid) for (const s of grid) {
+          plan[k][p] = { b, s };
+          const v = simFrom(ps, plan, pre, k * L, st.money, st.units, Ttot).value;
+          if (v > best + 1e-6) { best = v; keep = { b, s }; improved = true; }
+        }
+        plan[k][p] = keep;
+      }
+    }
+    if (!improved) break;
+  }
+  return { plan, value: best, fixedValue: fixed.value, hz };
+}
+
+/* ---------- Aides ---------- */
+// Garde budgétaire fournie par le manuel (apply_budget_guard dans scripts/algorithm.py), même logique :
+// un achat ne fait jamais descendre l'argent sous MIN_MONEY_RESERVE.
+const MIN_MONEY_RESERVE = 50;
+function applyBudgetGuard(raw, money, price, reserve = MIN_MONEY_RESERVE) {
+  if (raw <= 0) return raw;
+  if (money <= reserve) return 0;
+  const maxUnits = (money - reserve) / price;
+  return 100 * raw <= maxUnits ? raw : Math.round(maxUnits / 100 * 1000) / 1000;
+}
+const productsOk = () => market.products.filter(p => models[p]);
+const startMoney = () => holdings?.money ?? 1000;
+const startUnits = ps => Object.fromEntries(ps.map(p => [p, holdings?.products?.[p] ?? 1000]));
+const clamp01 = v => Math.min(1, Math.max(0, (+v || 0) / 100));
+const thresholdsReady = () => !!document.getElementById("sim-buy-A");
+let blockPlan = null;
+function currentPlan(ps) {
+  const first = readThresholds(ps);
+  if (!blockPlan) return first;
+  const plan = blockPlan.map((b, k) => (k === 0 ? first : b));
+  plan.L = blockPlan.L;
+  return plan;
+}
+function readThresholds(ps) {
+  return Object.fromEntries(ps.map(p => [p, { b: clamp01(document.getElementById("sim-buy-" + p).value), s: clamp01(document.getElementById("sim-sell-" + p).value) }]));
+}
+
+/* ---------- Graphiques ---------- */
+// Barre verticale en pointillés (et zone de prévision grisée à droite si shade)
+Chart.register({
+  id: "nowLine",
+  beforeDatasetsDraw(chart, _a, opts) {
+    if (!opts || !opts.show || !opts.shade) return;
+    const x = chart.scales.x.getPixelForValue(opts.x), { top, bottom, right } = chart.chartArea, ctx = chart.ctx;
+    ctx.save(); ctx.fillStyle = opts.shade; ctx.fillRect(x, top, right - x, bottom - top); ctx.restore();
+  },
+  afterDatasetsDraw(chart, _a, opts) {
+    if (!opts || !opts.show) return;
+    const x = chart.scales.x.getPixelForValue(opts.x), { top, bottom } = chart.chartArea, ctx = chart.ctx;
+    ctx.save();
+    ctx.strokeStyle = opts.color; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+    ctx.setLineDash([]); ctx.fillStyle = opts.color; ctx.font = "12px system-ui, sans-serif"; ctx.textAlign = "left";
+    ctx.fillText(opts.label || "maintenant", x + 4, top + 12);
+    ctx.restore();
+  },
+});
 function baseOptions(yTitle) {
   const grid = css("--grid"), txt = css("--text-secondary");
   return {
@@ -246,14 +467,11 @@ function baseOptions(yTitle) {
       legend: { display: false },
       tooltip: {
         filter: i => i.raw && i.raw.y != null && !i.dataset._hideTip,
-        callbacks: {
-          title: it => "Tick " + Math.round(it[0].parsed.x),
-          label: i => i.dataset.label + " : " + fmt(i.parsed.y, yTitle === "€" ? 0 : 3),
-        },
+        callbacks: { title: it => "Tick " + Math.round(it[0].parsed.x), label: i => i.dataset.label + " : " + fmt(i.parsed.y, 3) },
       },
     },
     scales: {
-      x: { type: "linear", grid: { color: grid }, ticks: { color: txt, maxTicksLimit: 8 }, title: { display: true, text: "tick", color: txt } },
+      x: { type: "linear", grid: { color: grid }, ticks: { color: txt, maxTicksLimit: 10 }, title: { display: true, text: "tick", color: txt } },
       y: { grid: { color: grid }, ticks: { color: txt }, title: { display: !!yTitle, text: yTitle, color: txt } },
     },
   };
@@ -266,106 +484,248 @@ const line = (label, data, color, extra = {}) => ({
   label, data, borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0, ...extra,
 });
 function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
+const col = p => css("--series-" + p);
 
-function render() {
-  const H = market.history, N = H.length, lastT = N - 1;
-  const win = +document.getElementById("win").value, hor = +document.getElementById("hor").value;
-  const from = win ? Math.max(0, N - win) : 0;
-  const products = market.products;
-  const col = p => css("--series-" + p);
-
-  /* Tuiles */
-  const tiles = document.getElementById("tiles"); tiles.innerHTML = "";
-  for (const p of products) {
-    const m = models[p], price = H[lastT][p];
-    if (!m) { tiles.insertAdjacentHTML("beforeend", `<div class="card tile">${p} : historique insuffisant</div>`); continue; }
-    const turn = nextTurn(m, lastT);
-    const fc = m.f(lastT + hor), delta = (fc - price) / price * 100;
-    const trendPct = m.b * 24 / m.trend(lastT) * 100;
-    const trendTxt = Math.abs(trendPct) < 0.3 ? "≈ plate" : (trendPct > 0 ? "haussière" : "baissière");
-    tiles.insertAdjacentHTML("beforeend", `
-      <div class="card tile">
-        <div class="head"><span class="swatch" style="background:${col(p)}"></span><h2>Produit ${p}</h2>
-          <span class="badge ${turn.rising ? "up" : "down"}">${turn.rising ? "▲ cycle montant" : "▼ cycle descendant"}</span></div>
-        <div class="big">${fmt(price, 3)}</div>
-        <dl>
-          <dt>Tendance de fond</dt><dd class="${m.b >= 0 ? "up" : "down"}">${trendTxt} (${trendPct >= 0 ? "+" : ""}${fmt(trendPct, 2)} % / 24 ticks)</dd>
-          <dt>Période du cycle</dt><dd>${fmt(m.P, 1)} ticks</dd>
-          <dt>Amplitude</dt><dd>± ${fmt(m.amp, 3)} (± ${fmt(m.amp / m.trend(lastT) * 100, 1)} %)</dd>
-          <dt>Position dans le cycle</dt><dd>${fmt(turn.pos * 100, 0)} % ${turn.pos > 0.7 ? "(proche sommet)" : turn.pos < -0.7 ? "(proche creux)" : ""}</dd>
-          <dt>Prochain sommet</dt><dd>dans ${fmt(turn.toPeak, 0)} ticks</dd>
-          <dt>Prochain creux</dt><dd>dans ${fmt(turn.toTrough, 0)} ticks</dd>
-          <dt>Prévision à +${hor}</dt><dd class="${delta >= 0 ? "up" : "down"}">${fmt(fc, 3)} (${delta >= 0 ? "+" : ""}${fmt(delta, 1)} %)</dd>
-          <dt>Qualité du modèle</dt><dd>R² = ${fmt(m.r2, 3)}</dd>
-        </dl>
-      </div>`);
-  }
-
-  /* Graphiques par produit */
-  const box = document.getElementById("charts");
-  if (!box.children.length) for (const p of products) box.insertAdjacentHTML("beforeend", `
-    <section class="card"><h2><span class="swatch" style="background:var(--series-${p})"></span> Produit ${p}</h2>
-      <div class="legend" style="color:var(--series-${p})">
-        <span><i class="ln"></i><b style="color:var(--text-secondary);font-weight:400">Prix observé</b></span>
-        <span><i class="ln dash"></i><b style="color:var(--text-secondary);font-weight:400">Modèle / prévision</b></span>
-        <span><i class="ln dot"></i><b style="color:var(--text-secondary);font-weight:400">Tendance</b></span>
-      </div>
-      <div class="chart-box"><canvas id="c-${p}"></canvas></div></section>`);
-  for (const p of products) {
-    const m = models[p], c = col(p);
-    const obs = [], fit = [], trend = [], fut = [], hi = [], lo = [];
-    for (let t = from; t < N; t++) obs.push({ x: t, y: H[t][p] });
-    if (m) {
-      for (let t = from; t <= lastT + hor; t++) trend.push({ x: t, y: m.trend(t) });
-      for (let t = from; t <= lastT; t++) fit.push({ x: t, y: m.f(t) });
-      for (let t = lastT; t <= lastT + hor; t++) {
-        fut.push({ x: t, y: m.f(t) });
-        hi.push({ x: t, y: m.f(t) + 2 * m.sigma }); lo.push({ x: t, y: m.f(t) - 2 * m.sigma });
-      }
+/* ---------- 1. Décision actuelle ---------- */
+function renderDecision() {
+  if (!thresholdsReady()) return;
+  const H = market.history, lastT = H.length - 1, ps = productsOk(), t0 = H[0].t;
+  const th = readThresholds(ps);
+  let money = startMoney();
+  const units = startUnits(ps), dec = {}, rows = [];
+  for (const p of ps) { // même calcul que le 1er tick de la simulation (argent partagé, ordre A, B, C)
+    const m = models[p], pr = m.f(lastT + 1), z = zones(m, lastT + 1, th[p]), moneyBefore = money;
+    let q = 0, reason;
+    if (z.tr > 0 && pr <= z.buyAt) {
+      q = Math.min(100, Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q;
+      reason = q >= 99.95 ? `Cours prévu ${fmt(pr, 3)} ≤ seuil d'achat ${fmt(z.buyAt, 3)} → <b>acheter 100 u</b>.`
+        : q > 0.05 ? `Cours prévu ${fmt(pr, 3)} ≤ seuil d'achat ${fmt(z.buyAt, 3)}, mais il ne reste que ${fmt(moneyBefore, 0)} d'argent → <b>acheter ${fmt(q, 0)} u seulement</b>.`
+        : `Zone d'achat, mais plus d'argent disponible → rien.`;
+    } else if (z.tr > 0 && pr >= z.sellAt) {
+      q = -Math.min(100, units[p]); money -= q * pr; units[p] += q;
+      reason = -q >= 99.95 ? `Cours prévu ${fmt(pr, 3)} ≥ seuil de vente ${fmt(z.sellAt, 3)} → <b>vendre 100 u</b>.`
+        : -q > 0.05 ? `Cours prévu ${fmt(pr, 3)} ≥ seuil de vente ${fmt(z.sellAt, 3)}, stock restant ${fmt(-q, 0)} u → <b>tout vendre</b>.`
+        : `Zone de vente, mais plus de stock → rien.`;
+    } else {
+      reason = `Cours prévu ${fmt(pr, 3)} entre le seuil d'achat (${fmt(z.buyAt, 3)}) et le seuil de vente (${fmt(z.sellAt, 3)}) → rien.`;
     }
-    mkChart("c-" + p, [
-      line("Prix", obs, c),
-      line("Modèle", fit, hexA(c, 0.55), { borderDash: [5, 4], borderWidth: 1.5 }),
-      line("Prévision", fut, c, { borderDash: [5, 4] }),
-      line("Borne haute (2σ)", hi, "transparent", { _hideTip: true, pointHoverRadius: 0 }),
-      line("Intervalle 2σ", lo, "transparent", { fill: "-1", backgroundColor: hexA(c, 0.15), _hideTip: true, pointHoverRadius: 0 }),
-      line("Tendance", trend, hexA(c, 0.7), { borderDash: [1, 4], borderWidth: 2 }),
-    ], baseOptions("prix"));
+    dec[p] = applyBudgetGuard(Math.round(q) / 100, startMoney(), H[lastT][p]); // comme main() dans algorithm.py
+    // Position du cours actuel entre la ligne des creux (0 %) et la ligne des sommets (100 %)
+    const turn = nextTurn(m, lastT), trNow = m.trend(lastT), lowNow = trNow * (1 - m.k), highNow = trNow * (1 + m.k);
+    const pos = Math.min(100, Math.max(0, (H[lastT][p] - lowNow) / (highNow - lowNow) * 100));
+    const zone = pos < 33 ? "bas du cycle" : pos > 67 ? "haut du cycle" : "milieu du cycle";
+    rows.push(`<tr>
+      <td><span class="swatch" style="background:${col(p)}"></span> <b>${p}</b></td>
+      <td><b class="${dec[p] > 0 ? "up" : dec[p] < 0 ? "down" : ""}">${fmtSig(dec[p])}</b></td>
+      <td class="nowrap">${fmt(H[lastT][p], 3)}</td>
+      <td class="nowrap">${fmt(z.buyAt, 3)} / ${fmt(z.sellAt, 3)}<br><span class="muted">${Math.round(th[p].b * 100)} % / ${Math.round(th[p].s * 100)} %</span></td>
+      <td class="nowrap"><span class="muted">creux</span><span class="gauge"><i style="left:${fmt(pos, 0).replace(",", ".")}%"></i></span><span class="muted">sommet</span><br>
+        <b>${fmt(pos, 0)} %</b> · ${zone} · <span class="${turn.rising ? "up" : "down"}">${turn.rising ? "▲ monte" : "▼ descend"}</span></td>
+      <td class="nowrap">${turn.rising ? `sommet dans ${fmt(turn.toPeak, 0)} t` : `creux dans ${fmt(turn.toTrough, 0)} t`}</td>
+      <td class="nowrap">${fmt(startUnits([p])[p], 0)} u</td>
+      <td class="reason">${reason}</td>
+    </tr>`);
   }
-
-  /* Cycles comparés */
-  const lgC = document.getElementById("lg-cycle");
-  lgC.innerHTML = products.map(p => `<span><span class="swatch" style="background:${col(p)}"></span>${p} (P = ${models[p] ? fmt(models[p].P, 0) : "?"})</span>`).join("")
-    + `<span><i class="ln dash"></i>partie future = prévision</span>`;
-  const cycDs = [];
-  for (const p of products) {
-    const m = models[p]; if (!m) continue;
-    const past = [], futr = [];
-    for (let t = from; t <= lastT; t++) past.push({ x: t, y: m.cyc(t) });
-    for (let t = lastT; t <= lastT + hor; t++) futr.push({ x: t, y: m.cyc(t) });
-    cycDs.push(line(p, past, col(p)), line(p + " (prévu)", futr, col(p), { borderDash: [5, 4] }));
-  }
-  const oc = baseOptions("position dans le cycle");
-  oc.scales.y.min = -1.1; oc.scales.y.max = 1.1;
-  oc.plugins.tooltip.callbacks.label = i => i.dataset.label + " : " + fmt(i.parsed.y * 100, 0) + " %";
-  mkChart("c-cycle", cycDs, oc);
-
-  /* Tableau */
-  let rows = `<tr><th>Produit</th><th>Prix actuel</th><th>a (niveau)</th><th>b (pente/tick)</th><th>Période P</th><th>Amplitude A</th><th>R²</th><th>σ résidus</th>`
-    + [6, 12, 24, 48].map(h => `<th>Prévu +${h}</th>`).join("") + `</tr>`;
-  for (const p of products) {
-    const m = models[p]; if (!m) continue;
-    rows += `<tr><td><span class="swatch" style="background:${col(p)}"></span> ${p}</td><td>${fmt(H[lastT][p], 3)}</td><td>${fmt(m.a, 3)}</td>
-      <td>${m.b >= 0 ? "+" : ""}${fmt(m.b, 4)}</td><td>${fmt(m.P, 2)}</td><td>${fmt(m.amp, 3)}</td><td>${fmt(m.r2, 3)}</td><td>${fmt(m.sigma, 3)}</td>`
-      + [6, 12, 24, 48].map(h => `<td>${fmt(m.f(lastT + h), 3)}</td>`).join("") + `</tr>`;
-  }
-  document.getElementById("tbl").innerHTML = rows;
+  document.getElementById("decision").innerHTML = ps.map(p => {
+    const v = dec[p], cls = v > 0 ? "up" : v < 0 ? "down" : "";
+    const act = v > 0 ? `Acheter ${fmt(v * 100, 0)} u` : v < 0 ? `Vendre ${fmt(-v * 100, 0)} u` : "Ne rien faire";
+    return `<div class="dec"><div class="p"><span class="swatch" style="background:${col(p)}"></span>${p}</div>
+      <div><div class="v ${cls}">${fmtSig(v)}</div><div class="a">${act}</div></div></div>`;
+  }).join("");
+  // Valeur attendue avec ces seuils (durée du slider) vs ne rien faire
+  const T = +document.getElementById("sim-hor").value, units0 = startUnits(ps);
+  const withRule = simulateJoint(ps, currentPlan(ps), lastT, startMoney(), units0, T, false).value;
+  const nothing = startMoney() + ps.reduce((a, p) => a + units0[p] * models[p].f(lastT + T), 0);
+  const now = startMoney() + ps.reduce((a, p) => a + units0[p] * H[lastT][p], 0);
+  document.getElementById("dec-note").innerHTML =
+    `Valeur actuelle du portefeuille : <b>${fmt(now, 0)}</b> (argent ${fmt(startMoney(), 0)}) · avec ces seuils, valeur prévue dans ${T} ticks : <b class="up">${fmt(withRule, 0)}</b> · sans rien faire : ${fmt(nothing, 0)}.`;
+  document.getElementById("justif").innerHTML =
+    `<tr><th>Produit</th><th>Décision</th><th>Cours actuel</th><th>Seuils achat / vente<br><span class="muted">prix · réglage</span></th><th>Position dans le cycle<br><span class="muted">0 % = ligne des creux · 100 % = ligne des sommets</span></th><th>Prochain retournement</th><th>Stock</th><th class="reason">Raison</th></tr>`
+    + rows.join("");
 }
 
-document.getElementById("win").addEventListener("change", () => market && render());
-document.getElementById("hor").addEventListener("change", () => market && render());
+/* ---------- 2. Cours du marché ---------- */
+function renderMarket() {
+  const H = market.history, N = H.length, lastT = N - 1, t0 = H[0].t, X = i => t0 + i;
+  const win = +document.getElementById("win").value, hor = +document.getElementById("hor").value;
+  const from = win ? Math.max(0, N - win) : 0, sel = document.getElementById("prod").value;
+  const ps = sel === "ABC" ? productsOk() : [sel];
+  const ds = [];
+  for (const p of ps) {
+    const m = models[p], c = col(p), obs = [], fut = [];
+    for (let t = from; t < N; t++) obs.push({ x: X(t), y: H[t][p] });
+    if (m) for (let t = lastT; t <= lastT + hor; t++) fut.push({ x: X(t), y: m.f(t) });
+    ds.push(line(p + " observé", obs, c), line(p + " prévu", fut, c, { borderDash: [5, 4] }));
+    if (sel !== "ABC" && m) { // un seul produit : bande d'incertitude et tendance
+      const hi = [], lo = [], trend = [];
+      for (let t = lastT; t <= lastT + hor; t++) { hi.push({ x: X(t), y: m.f(t) + 2 * m.sigma }); lo.push({ x: X(t), y: m.f(t) - 2 * m.sigma }); }
+      for (let t = from; t <= lastT + hor; t++) trend.push({ x: X(t), y: m.trend(t) });
+      ds.push(line("Borne haute", hi, "transparent", { _hideTip: true, pointHoverRadius: 0 }),
+        line("Intervalle ±2σ", lo, "transparent", { fill: "-1", backgroundColor: hexA(c, 0.15), _hideTip: true, pointHoverRadius: 0 }),
+        line("Tendance", trend, hexA(c, 0.7), { borderDash: [1, 4], borderWidth: 2 }));
+    }
+  }
+  document.getElementById("lg-main").innerHTML = ps.map(p => `<span><span class="swatch" style="background:${col(p)}"></span>${p}</span>`).join("")
+    + `<span><i class="ln"></i>observé</span><span><i class="ln dash"></i>prévu (zone grisée)</span>`
+    + (sel !== "ABC" ? `<span><i class="ln dot"></i>tendance</span>` : "");
+  const o = baseOptions("prix");
+  o.scales.x.max = X(lastT + hor);
+  o.plugins.nowLine = { show: true, x: X(lastT), color: css("--text-secondary"), shade: css("--shade"), label: `maintenant (tick ${X(lastT)})` };
+  mkChart("c-main", ds, o);
+}
+
+/* ---------- 3. Simulations ---------- */
+function buildSimCards() {
+  const box = document.getElementById("sim-charts");
+  if (box.children.length) return;
+  for (const p of market.products) box.insertAdjacentHTML("beforeend", `
+    <section class="card">
+      <div class="chart-head"><h2><span class="swatch" style="background:var(--series-${p})"></span> Produit ${p}</h2>
+        <label class="muted">Seuil d'achat (bloc 1) <input id="sim-buy-${p}" type="number" min="0" max="100" step="5" value="20" style="width:64px"> %</label>
+        <label class="muted">Seuil de vente (bloc 1) <input id="sim-sell-${p}" type="number" min="0" max="100" step="5" value="20" style="width:64px"> %</label>
+      </div>
+      <p class="muted" id="sim-sum-${p}" style="margin:0 0 4px"></p>
+      <div class="legend" id="sim-lg-${p}"></div>
+      <div class="chart-box tall"><canvas id="c-sim-${p}"></canvas></div>
+    </section>`);
+  box.addEventListener("input", () => { renderDecision(); renderSim(); });
+}
+function renderSim() {
+  if (!thresholdsReady() || document.getElementById("tab-sim").hidden) return;
+  const H = market.history, lastT = H.length - 1, ps = productsOk();
+  const T = +document.getElementById("sim-hor").value, L = +document.getElementById("sim-hor").step;
+  document.getElementById("sim-hor-val").textContent = `${Math.round(T / L)} bloc${T / L > 1 ? "s" : ""} · ${T} ticks`;
+  const plan = currentPlan(ps), thAt = thAtFn(plan), money0 = startMoney(), units0 = startUnits(ps);
+  const r = simulateJoint(ps, plan, lastT, money0, units0, T);
+  const totCol = css("--series-total");
+
+  // Total
+  const v0 = r.total[0].y, v1 = r.total.at(-1).y, pct = (v1 - v0) / v0 * 100;
+  document.getElementById("sim-sum-total").innerHTML =
+    `Valeur totale : ${fmt(v0, 0)} → <b class="${v1 >= v0 ? "up" : "down"}">${fmt(v1, 0)} (${pct >= 0 ? "+" : ""}${fmt(pct, 1)} %)</b> · argent ${fmt(money0, 0)} → ${fmt(r.money, 0)} · `
+    + ps.map(p => `${p} : ${fmt(units0[p], 0)} → ${fmt(r.units[p], 0)} u`).join(" · ")
+    + `<br>Les 3 produits partagent le même argent (ordre A, B, C à chaque tick, 100 u max par tick et par produit).`;
+  const ot = baseOptions("valeur totale");
+  ot.scales.x.title.text = "T (ticks, 0 = maintenant)"; ot.scales.x.min = 0; ot.scales.x.max = T;
+  ot.plugins.tooltip.callbacks.title = it => "T = " + Math.round(it[0].parsed.x);
+  ot.plugins.tooltip.callbacks.label = i => i.dataset.label + " : " + fmt(i.parsed.y, 0);
+  mkChart("c-sim-total", [line("Valeur totale", r.total, totCol)], ot);
+
+  // Par produit : cours (observé sur une période, puis prévu), seuils, et stock du produit dans la simulation commune
+  for (const p of ps) {
+    const m = models[p], back = Math.min(lastT, Math.round(m.P));
+    const price = [], buy = [], sell = [];
+    for (let i = -back; i <= T; i++) {
+      const t = lastT + i, z = zones(m, t, thAt(i)[p]);
+      price.push({ x: i, y: i <= 0 ? H[t][p] : m.f(t) });
+      buy.push({ x: i, y: z.buyAt }); sell.push({ x: i, y: z.sellAt });
+    }
+    const obs = price.filter(d => d.x <= 0), fut = price.filter(d => d.x >= 0);
+    document.getElementById("sim-sum-" + p).innerHTML =
+      `Stock initial ${fmt(units0[p], 0)} u → stock final ${fmt(r.units[p], 0)} u`;
+    document.getElementById("sim-lg-" + p).innerHTML =
+      `<span><span class="swatch" style="background:${col(p)}"></span>Cours de ${p} : observé (T &lt; 0) puis prévu (axe gauche)</span>`
+      + `<span style="color:${css("--good")}"><i class="ln dash"></i></span>Seuil d'achat (change à chaque bloc)`
+      + `<span style="color:${css("--bad")}"><i class="ln dash"></i></span>Seuil de vente (change à chaque bloc)`
+      + `<span style="color:${css("--text-muted")}"><i class="ln"></i></span>Stock de ${p} (axe droit)`;
+    const o = baseOptions("cours");
+    o.scales.x.title.text = "T (ticks, 0 = maintenant)"; o.scales.x.min = -back; o.scales.x.max = T;
+    o.scales.y1 = { position: "right", grid: { drawOnChartArea: false }, ticks: { color: css("--text-secondary") }, title: { display: true, text: "stock (unités)", color: css("--text-secondary") }, min: 0 };
+    o.plugins.nowLine = { show: true, x: 0, color: css("--text-secondary"), label: "T = 0 (maintenant)" };
+    o.plugins.tooltip.callbacks.title = it => "T = " + Math.round(it[0].parsed.x);
+    o.plugins.tooltip.callbacks.label = i => i.dataset.label + " : " + fmt(i.parsed.y, i.dataset.yAxisID === "y1" ? 0 : 3);
+    const dash = { borderDash: [6, 4], borderWidth: 1.5 };
+    mkChart("c-sim-" + p, [
+      line("Cours observé", obs, col(p)),
+      line("Cours prévu", fut, col(p)),
+      line("Seuil d'achat", buy, css("--good"), dash),
+      line("Seuil de vente", sell, css("--bad"), dash),
+      line("Stock", r.stock[p], css("--text-muted"), { yAxisID: "y1", borderWidth: 1.5 }),
+    ], o);
+  }
+}
+function runOptimizer() {
+  const T = +document.getElementById("sim-hor").value, ps = productsOk();
+  const btn = document.getElementById("sim-opt"), res = document.getElementById("sim-opt-res");
+  const hz = cycleHorizon(T);
+  btn.disabled = true; res.textContent = `Recherche des meilleurs seuils par bloc sur ${hz.T} ticks… (quelques secondes)`;
+  document.getElementById("sim-blocks").innerHTML = "";
+  setTimeout(() => {
+    const t0 = performance.now(), r = optimizeBlocks(T);
+    applyPlan(r.plan, `Calculés dans le navigateur en ${fmt((performance.now() - t0) / 1000, 1)} s.`
+      + ` Valeur finale prévue : <b>${fmt(r.value, 0)}</b> (seuils identiques partout : ${fmt(r.fixedValue, 0)}).`);
+    btn.disabled = false;
+  }, 30);
+}
+// Affiche un plan de seuils par bloc : champs du bloc 1, tableau des blocs, puis décision et simulations
+function applyPlan(plan, sourceTxt) {
+  const ps = productsOk(), L = plan.L, nb = plan.length;
+  blockPlan = plan;
+  for (const p of ps) {
+    document.getElementById("sim-buy-" + p).value = Math.round(plan[0][p].b * 100);
+    document.getElementById("sim-sell-" + p).value = Math.round(plan[0][p].s * 100);
+  }
+  const cyc = ps.map(p => { const n = Math.round(L / Math.round(models[p].P)); return `${n} cycle${n > 1 ? "s" : ""} de ${p}`; }).join(", ");
+  document.getElementById("sim-opt-res").innerHTML =
+    `Seuils par tranche de <b>${L} ticks</b> (1 tranche = ${cyc}), sur ${nb} tranches (${nb * L} ticks). ${sourceTxt}`
+    + `<br>La décision actuelle utilise les seuils de la tranche 1 (modifiables sur chaque graphique) ; les tranches suivantes servent à la simulation.`;
+  const head = `<tr><th>Tranche</th><th>Ticks</th>` + ps.map(p => `<th><span class="swatch" style="background:${col(p)}"></span> ${p} achat / vente</th>`).join("") + `</tr>`;
+  document.getElementById("sim-blocks").innerHTML = `<table>${head}` + plan.map((th, k) =>
+    `<tr><td>${k + 1}</td><td class="nowrap">${k * L + 1}–${(k + 1) * L}${k === nb - 1 ? " et +" : ""}</td>`
+    + ps.map(p => `<td class="nowrap">${Math.round(th[p].b * 100)} / ${Math.round(th[p].s * 100)} %</td>`).join("") + `</tr>`).join("") + `</table>`;
+  renderDecision(); renderSim();
+}
+
+/* ---------- Chargement ---------- */
+async function load() {
+  document.getElementById("err").textContent = "";
+  try {
+    const bust = "?t=" + Date.now();
+    [market, holdings, published] = await Promise.all([
+      fetch(MARKET_URL + bust).then(r => r.json()),
+      fetch(HOLDINGS_URL + bust).then(r => r.json()).catch(() => null),
+      fetch(DECISION_URL + bust).then(r => r.json()).catch(() => null),
+    ]);
+    strategy = await fetch(STRATEGY_URL + bust).then(r => r.json()).catch(() => null);
+    const H = market.history;
+    const date = d => (d ? new Date(d).toLocaleString("fr-FR") : "inconnue");
+    document.getElementById("stamp").innerHTML =
+      `Dernière mise à jour de la décision : <b>${date(published?.updated_at)}</b> · Dernière mise à jour du marché : <b>${date(market.generated_at)}</b>`;
+    models = {};
+    for (const p of market.products) models[p] = fitModel(H.map(r => r[p]));
+    buildSimCards();
+    // Slider de simulation : par tranches de L ticks (multiple commun des périodes, ex. 96)
+    const hz = cycleHorizon(1), L = hz.exact ? hz.L : 96, slider = document.getElementById("sim-hor");
+    const nb = strategy && strategy.block_ticks === L ? strategy.blocks : 5;
+    slider.min = L; slider.step = L; slider.max = 10 * L; slider.value = nb * L;
+    renderMarket();
+    if (strategy && strategy.tick === H.at(-1).t && strategy.block_ticks === L) {
+      // Même tick que le workflow : on reprend ses seuils (la décision affichée = celle publiée)
+      const plan = strategy.plan.map(b => Object.fromEntries(Object.entries(b).map(([p, v]) => [p, { b: v.buy, s: v.sell }])));
+      plan.L = L;
+      applyPlan(plan, `Calculés par le workflow le ${new Date(strategy.generated_at).toLocaleString("fr-FR")} (tick ${strategy.tick}).`
+        + ` Valeur finale prévue : <b>${fmt(strategy.expected_value, 0)}</b> (seuils identiques partout : ${fmt(strategy.expected_value_fixed_thresholds, 0)}).`);
+    } else {
+      runOptimizer(); // stratégie absente ou d'un ancien tick : recherche dans le navigateur
+    }
+  } catch (e) {
+    document.getElementById("err").textContent = "Impossible de charger les données : " + e;
+  }
+}
+const renderAll = () => { if (!market) return; renderDecision(); renderMarket(); renderSim(); };
+for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => {
+  for (const x of document.querySelectorAll(".tabs button")) x.setAttribute("aria-selected", x === b ? "true" : "false");
+  document.getElementById("tab-main").hidden = b.dataset.tab !== "main";
+  document.getElementById("tab-sim").hidden = b.dataset.tab !== "sim";
+  if (market) b.dataset.tab === "sim" ? renderSim() : renderMarket();
+});
+document.getElementById("win").addEventListener("change", () => market && renderMarket());
+document.getElementById("hor").addEventListener("change", () => market && renderMarket());
+document.getElementById("prod").addEventListener("change", () => market && renderMarket());
+document.getElementById("sim-hor").addEventListener("input", () => { document.getElementById("sim-opt-res").textContent = "Nombre de tranches modifié : relance la recherche pour adapter les seuils."; renderDecision(); renderSim(); });
+document.getElementById("sim-opt").addEventListener("click", () => market && runOptimizer());
 document.getElementById("reload").addEventListener("click", load);
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => market && render());
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
 load();
 </script>
 </body>

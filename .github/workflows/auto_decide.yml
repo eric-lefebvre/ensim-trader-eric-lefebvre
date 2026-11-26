@@ -1,12 +1,25 @@
 name: Auto decide
 
+# Le marché de l'organisateur avance au plus une fois par heure (son cron "0 * * * *", souvent retardé)
+# et lit decision.json au début de chaque tick. On vérifie toutes les heures, 20 min après son cron,
+# s'il y a un nouveau tick : si oui, scripts/algorithm.py recalcule les seuils et la décision ;
+# sinon il ne fait rien (pas de commit).
 "on":
   schedule:
-    - cron: "*/30 * * * *"
-  workflow_dispatch: {}
+    - cron: "20 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Recalculer même s'il n'y a pas de nouveau tick"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+
+concurrency:
+  group: auto-decide
+  cancel-in-progress: false
 
 jobs:
   decide:
@@ -16,11 +29,21 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: pip install requests
-      - run: python scripts/algorithm.py
-      - run: |
+      - run: pip install requests numpy
+      - name: Calcul de la décision
+        run: python scripts/algorithm.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # lecture de l'API GitHub (évite le cache des URL raw)
+          FORCE: ${{ inputs.force && '1' || '0' }}
+      - name: Publication (decision.json pour le marché, strategy.json pour le dashboard)
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add decision.json
-          git commit -m "Update decision [automated]" || echo "Nothing to commit"
-          git push
+          git add decision.json docs/data/strategy.json
+          if git diff --cached --quiet; then
+            echo "Nothing to commit"
+          else
+            git commit -m "Update decision [automated]"
+            git pull --rebase
+            git push
+          fi
