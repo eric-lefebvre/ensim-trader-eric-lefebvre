@@ -187,21 +187,34 @@ def optimize_fixed(ps, pre, money0, units0, T):
             break
     return th, float(best)
 
+MIN_GAIN = 0.0005   # on ne change les seuils d'une tranche que si la valeur finale gagne plus de 0,05 %
+
 def optimize_blocks(ps, pre, money0, units0, L, nb):
-    """Seuils propres à chaque bloc de L ticks (départ : meilleurs seuils fixes), max 3 tours."""
+    """Seuils propres à chaque tranche de L ticks (départ : meilleurs seuils fixes), max 3 tours.
+    - Stabilité : un changement n'est retenu que s'il améliore la valeur finale de plus de MIN_GAIN.
+    - Produit dont la tendance atteint 0 pendant l'horizon (ex. C) : d'une tranche à la suivante, le seuil
+      d'achat ne peut que baisser et le seuil de vente que monter (on pousse de plus en plus à la vente)."""
     T = L * nb
     fixed, fixed_value = optimize_fixed(ps, pre, money0, units0, T)
     plan = [dict(fixed) for _ in range(nb)]
+    dying = {p for p in ps if (pre[p]["tr"][1:] <= 0).any()}
     best = simulate(ps, plan, L, pre, 0, money0, units0, T)[0][0]
     for _ in range(3):
         improved = False
         for k in range(nb):
-            _, m_k, u_k = simulate(ps, plan, L, pre, 0, money0, units0, k * L)   # état au début du bloc k
+            _, m_k, u_k = simulate(ps, plan, L, pre, 0, money0, units0, k * L)   # état au début de la tranche k
             m_k, u_k = float(m_k[0]), {p: float(u_k[p][0]) for p in ps}
             for p in ps:
                 v, _, _ = simulate(ps, plan, L, pre, k * L, m_k, u_k, T, vary=(k, p))
+                if p in dying:
+                    ok = np.ones(len(v), dtype=bool)
+                    if k > 0:
+                        ok &= (GRID_B <= plan[k - 1][p][0] + 1e-9) & (GRID_S >= plan[k - 1][p][1] - 1e-9)
+                    if k < nb - 1:
+                        ok &= (GRID_B >= plan[k + 1][p][0] - 1e-9) & (GRID_S <= plan[k + 1][p][1] + 1e-9)
+                    v = np.where(ok, v, -np.inf)
                 j = int(np.argmax(v))
-                if v[j] > best + 1e-6:
+                if v[j] > best * (1 + MIN_GAIN):
                     best, plan[k][p], improved = float(v[j]), (float(GRID_B[j]), float(GRID_S[j])), True
         if not improved:
             break

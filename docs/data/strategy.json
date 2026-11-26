@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-26T15:26:17Z",
+  "generated_at": "2026-11-26T15:43:50Z",
   "tick": 384,
   "market_generated_at": "2026-11-26T13:46:31Z",
   "market_commit": "e6a0664ff6bd660dcc95178e11594c1cfa56db19",
@@ -9,11 +9,11 @@
     {
       "A": {
         "buy": 1.0,
-        "sell": 0.75
+        "sell": 0.7
       },
       "B": {
-        "buy": 0.55,
-        "sell": 0.7
+        "buy": 0.65,
+        "sell": 0.75
       },
       "C": {
         "buy": 0.4,
@@ -31,21 +31,21 @@
       },
       "C": {
         "buy": 0.4,
-        "sell": 0.65
+        "sell": 0.9
       }
     },
     {
       "A": {
         "buy": 0.85,
-        "sell": 0.85
+        "sell": 0.95
       },
       "B": {
         "buy": 0.5,
         "sell": 0.6
       },
       "C": {
-        "buy": 0.0,
-        "sell": 0.0
+        "buy": 0.4,
+        "sell": 0.9
       }
     },
     {
@@ -89,33 +89,33 @@
   },
   "reasons": {
     "A": "cours pr\u00e9vu 4.949 <= seuil d'achat 4.976",
-    "B": "cours pr\u00e9vu 12.993 >= seuil de vente 12.180",
+    "B": "cours pr\u00e9vu 12.993 >= seuil de vente 12.122",
     "C": "cours pr\u00e9vu 1.103 >= seuil de vente 1.098"
   },
-  "expected_value": 84625.29,
+  "expected_value": 84469.42,
   "expected_value_fixed_thresholds": 82218.96,
   "models": {
     "A": {
       "period": 48.0,
-      "level": 5.025864148548401,
-      "drift": -0.00012872899401361777,
-      "amplitude": 0.14455057083824066,
-      "phase": -0.03786288686577725
+      "level": 5.025864148548409,
+      "drift": -0.00012872899401364973,
+      "amplitude": 0.14455057083824044,
+      "phase": -0.03786288686577733
     },
     "B": {
       "period": 96.0,
       "level": 7.985308393066277,
-      "drift": 0.010008696167805775,
+      "drift": 0.010008696167805779,
       "amplitude": 0.09903787987967133,
-      "phase": 1.4607914840009075
+      "phase": 1.4607914840009073
     },
     "C": {
       "period": 24.0,
-      "level": 3.001384022344958,
-      "drift": -0.0050213547237072595,
-      "amplitude": 0.2300230425733927,
+      "level": 3.0013840223449586,
+      "drift": -0.00502135472370726,
+      "amplitude": 0.2300230425733926,
       "phase": 3.018818406605599
     }
   },
-  "compute_seconds": 0.7
+  "compute_seconds": 1.4
 }

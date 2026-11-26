@@ -1,0 +1,592 @@
+{
+  "description": "Décision appliquée par le marché à chaque tick : la dernière version de decision.json publiée sur GitHub avant l'heure du tick. Valeurs dans [-1, 1] : +1 = acheter 100 u, -1 = vendre 100 u, 0 = rien.",
+  "generated_at": "2026-11-26T15:35:00Z",
+  "ticks": [
+    {
+      "tick": 349,
+      "tick_time": "2026-11-17T01:24:11Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.6223,
+        "B": 10.7022,
+        "C": 1.2115
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 350,
+      "tick_time": "2026-11-17T09:58:28Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.7006,
+        "B": 10.8265,
+        "C": 1.301
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 351,
+      "tick_time": "2026-11-17T18:58:53Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.6469,
+        "B": 11.0265,
+        "C": 1.3501
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 352,
+      "tick_time": "2026-11-18T01:31:38Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.6084,
+        "B": 10.9971,
+        "C": 1.3968
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 353,
+      "tick_time": "2026-11-18T09:35:48Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.566,
+        "B": 11.0836,
+        "C": 1.4826
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 354,
+      "tick_time": "2026-11-18T18:34:00Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.4633,
+        "B": 10.9987,
+        "C": 1.4659
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 355,
+      "tick_time": "2026-11-19T00:54:08Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.3968,
+        "B": 11.0269,
+        "C": 1.4693
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 356,
+      "tick_time": "2026-11-19T08:16:34Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.3469,
+        "B": 11.1006,
+        "C": 1.4649
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 357,
+      "tick_time": "2026-11-19T17:53:10Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.3204,
+        "B": 11.0591,
+        "C": 1.4305
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 358,
+      "tick_time": "2026-11-20T00:07:29Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.1281,
+        "B": 11.3421,
+        "C": 1.3979
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 359,
+      "tick_time": "2026-11-20T07:57:06Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.0806,
+        "B": 11.4877,
+        "C": 1.3383
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 360,
+      "tick_time": "2026-11-20T16:42:51Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.0828,
+        "B": 11.1676,
+        "C": 1.2913
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 361,
+      "tick_time": "2026-11-20T17:22:22Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.0505,
+        "B": 11.2614,
+        "C": 1.222
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 362,
+      "tick_time": "2026-11-20T22:54:23Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.9573,
+        "B": 11.4791,
+        "C": 1.1537
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 363,
+      "tick_time": "2026-11-21T03:41:05Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.8192,
+        "B": 11.522,
+        "C": 1.0698
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 364,
+      "tick_time": "2026-11-21T11:57:29Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.7558,
+        "B": 11.6302,
+        "C": 1.0052
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 365,
+      "tick_time": "2026-11-21T18:44:22Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.5243,
+        "B": 11.7236,
+        "C": 0.9536
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 366,
+      "tick_time": "2026-11-21T23:39:59Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.5839,
+        "B": 11.6529,
+        "C": 0.9239
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 367,
+      "tick_time": "2026-11-22T04:30:49Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.4903,
+        "B": 11.9575,
+        "C": 0.9092
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 368,
+      "tick_time": "2026-11-22T12:58:50Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.4457,
+        "B": 12.0044,
+        "C": 0.9021
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 369,
+      "tick_time": "2026-11-22T20:11:55Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.4097,
+        "B": 12.0976,
+        "C": 0.9312
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 370,
+      "tick_time": "2026-11-23T01:19:09Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.3296,
+        "B": 11.8996,
+        "C": 0.9548
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 371,
+      "tick_time": "2026-11-23T10:06:02Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.233,
+        "B": 12.2819,
+        "C": 1.0067
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 372,
+      "tick_time": "2026-11-23T22:22:24Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.2351,
+        "B": 12.5145,
+        "C": 1.0432
+      },
+      "decision_published_at": "2026-11-16T19:27:01Z",
+      "decision_commit": "49ca30d"
+    },
+    {
+      "tick": 373,
+      "tick_time": "2026-11-24T06:39:28Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.2612,
+        "B": 12.5796,
+        "C": 1.0823
+      },
+      "decision_published_at": "2026-11-24T01:06:08Z",
+      "decision_commit": "c239fc4"
+    },
+    {
+      "tick": 374,
+      "tick_time": "2026-11-24T13:09:38Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.3505,
+        "B": 12.5995,
+        "C": 1.1521
+      },
+      "decision_published_at": "2026-11-24T11:17:52Z",
+      "decision_commit": "fef9869"
+    },
+    {
+      "tick": 375,
+      "tick_time": "2026-11-24T13:12:20Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.4184,
+        "B": 12.5047,
+        "C": 1.2063
+      },
+      "decision_published_at": "2026-11-24T11:17:52Z",
+      "decision_commit": "fef9869"
+    },
+    {
+      "tick": 376,
+      "tick_time": "2026-11-24T13:15:05Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.4579,
+        "B": 12.4351,
+        "C": 1.2875
+      },
+      "decision_published_at": "2026-11-24T11:17:52Z",
+      "decision_commit": "fef9869"
+    },
+    {
+      "tick": 377,
+      "tick_time": "2026-11-24T18:32:16Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.5095,
+        "B": 12.6423,
+        "C": 1.3177
+      },
+      "decision_published_at": "2026-11-24T11:17:52Z",
+      "decision_commit": "fef9869"
+    },
+    {
+      "tick": 378,
+      "tick_time": "2026-11-25T02:53:10Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.5818,
+        "B": 12.6217,
+        "C": 1.3699
+      },
+      "decision_published_at": "2026-11-24T21:25:36Z",
+      "decision_commit": "a259b94"
+    },
+    {
+      "tick": 379,
+      "tick_time": "2026-11-25T11:57:57Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.5504,
+        "B": 12.6319,
+        "C": 1.3495
+      },
+      "decision_published_at": "2026-11-25T04:25:28Z",
+      "decision_commit": "6a19ef6"
+    },
+    {
+      "tick": 380,
+      "tick_time": "2026-11-25T21:11:53Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.5831,
+        "B": 12.4424,
+        "C": 1.3519
+      },
+      "decision_published_at": "2026-11-25T14:44:43Z",
+      "decision_commit": "588bb55"
+    },
+    {
+      "tick": 381,
+      "tick_time": "2026-11-26T03:52:50Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.6568,
+        "B": 12.5156,
+        "C": 1.333
+      },
+      "decision_published_at": "2026-11-25T23:26:09Z",
+      "decision_commit": "a4fa700"
+    },
+    {
+      "tick": 382,
+      "tick_time": "2026-11-26T13:02:04Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.7511,
+        "B": 12.7918,
+        "C": 1.2841
+      },
+      "decision_published_at": "2026-11-26T05:17:48Z",
+      "decision_commit": "582b3b9"
+    },
+    {
+      "tick": 383,
+      "tick_time": "2026-11-26T13:26:37Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.8001,
+        "B": 12.5622,
+        "C": 1.2227
+      },
+      "decision_published_at": "2026-11-26T05:17:48Z",
+      "decision_commit": "582b3b9"
+    },
+    {
+      "tick": 384,
+      "tick_time": "2026-11-26T13:46:31Z",
+      "decision": {
+        "A": 0.0,
+        "B": 0.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 4.8403,
+        "B": 12.619,
+        "C": 1.1713
+      },
+      "decision_published_at": "2026-11-26T05:17:48Z",
+      "decision_commit": "582b3b9"
+    }
+  ],
+  "pending": {
+    "tick": 385,
+    "decision": {
+      "A": 1.0,
+      "B": -1.0,
+      "C": -1.0
+    },
+    "decision_published_at": "2026-11-26T15:26:17Z",
+    "decision_commit": "38ac56f"
+  }
+}

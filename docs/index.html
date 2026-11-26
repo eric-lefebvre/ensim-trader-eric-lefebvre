@@ -382,6 +382,7 @@ function simFrom(ps, plan, pre, i0, money, units0, T) {
   }
   return { money, units, value: money + val };
 }
+const MIN_GAIN = 0.0005; // comme MIN_GAIN dans scripts/algorithm.py
 function optimizeBlocks(T) {
   const lastT = market.history.length - 1, ps = productsOk();
   const hz = cycleHorizon(T), Ttot = hz.T, L = hz.exact ? hz.L : Ttot, nb = Math.max(1, Math.round(Ttot / L));
@@ -391,19 +392,25 @@ function optimizeBlocks(T) {
   const fixed = optimizeThresholds(Ttot);
   const plan = Array.from({ length: nb }, () => JSON.parse(JSON.stringify(fixed.th)));
   plan.L = L;
+  // Produits dont la tendance atteint 0 pendant l'horizon (ex. C) : d'une tranche à la suivante, le seuil
+  // d'achat ne peut que baisser et le seuil de vente que monter (on pousse de plus en plus à la vente).
+  const dying = new Set(ps.filter(p => pre[p].tr.slice(1).some(v => v <= 0)));
   let best = simFrom(ps, plan, pre, 0, money0, units0, Ttot).value;
   for (let round = 0; round < 3; round++) {
     let improved = false;
     for (let k = 0; k < nb; k++) {
-      const st = simFrom(ps, plan, pre, 0, money0, units0, k * L); // état au début du bloc k
+      const st = simFrom(ps, plan, pre, 0, money0, units0, k * L); // état au début de la tranche k
       for (const p of ps) {
-        let keep = plan[k][p];
+        const keep = plan[k][p], prev = k > 0 ? plan[k - 1][p] : null, next = k < nb - 1 ? plan[k + 1][p] : null;
+        let cand = null, candV = -Infinity;
         for (const b of grid) for (const s of grid) {
+          if (dying.has(p) && ((prev && (b > prev.b + 1e-9 || s < prev.s - 1e-9)) || (next && (b < next.b - 1e-9 || s > next.s + 1e-9)))) continue;
           plan[k][p] = { b, s };
           const v = simFrom(ps, plan, pre, k * L, st.money, st.units, Ttot).value;
-          if (v > best + 1e-6) { best = v; keep = { b, s }; improved = true; }
+          if (v > candV) { candV = v; cand = { b, s }; }
         }
-        plan[k][p] = keep;
+        // stabilité : on ne change que si la valeur finale gagne plus de MIN_GAIN (0,05 %)
+        if (cand && candV > best * (1 + MIN_GAIN)) { best = candV; plan[k][p] = cand; improved = true; } else plan[k][p] = keep;
       }
     }
     if (!improved) break;
@@ -523,7 +530,6 @@ function renderDecision() {
         <b>${fmt(pos, 0)} %</b> · ${zone} · <span class="${turn.rising ? "up" : "down"}">${turn.rising ? "▲ monte" : "▼ descend"}</span></td>
       <td class="nowrap">${turn.rising ? `sommet dans ${fmt(turn.toPeak, 0)} t` : `creux dans ${fmt(turn.toTrough, 0)} t`}</td>
       <td class="nowrap">${fmt(startUnits([p])[p], 0)} u</td>
-      <td class="reason">${reason}</td>
     </tr>`);
   }
   document.getElementById("decision").innerHTML = ps.map(p => {
@@ -540,7 +546,7 @@ function renderDecision() {
   document.getElementById("dec-note").innerHTML =
     `Valeur actuelle du portefeuille : <b>${fmt(now, 0)}</b> (argent ${fmt(startMoney(), 0)}) · avec ces seuils, valeur prévue dans ${T} ticks : <b class="up">${fmt(withRule, 0)}</b> · sans rien faire : ${fmt(nothing, 0)}.`;
   document.getElementById("justif").innerHTML =
-    `<tr><th>Produit</th><th>Décision</th><th>Cours actuel</th><th>Seuils achat / vente<br><span class="muted">prix · réglage</span></th><th>Position dans le cycle<br><span class="muted">0 % = ligne des creux · 100 % = ligne des sommets</span></th><th>Prochain retournement</th><th>Stock</th><th class="reason">Raison</th></tr>`
+    `<tr><th>Produit</th><th>Décision</th><th>Cours actuel</th><th>Seuils achat / vente</th><th>Position dans le cycle</th><th>Prochain retournement</th><th>Stock</th></tr>`
     + rows.join("");
 }
 
@@ -556,18 +562,21 @@ function renderMarket() {
     for (let t = from; t < N; t++) obs.push({ x: X(t), y: H[t][p] });
     if (m) for (let t = lastT; t <= lastT + hor; t++) fut.push({ x: X(t), y: m.f(t) });
     ds.push(line(p + " observé", obs, c), line(p + " prévu", fut, c, { borderDash: [5, 4] }));
-    if (sel !== "ABC" && m) { // un seul produit : bande d'incertitude et tendance
-      const hi = [], lo = [], trend = [];
-      for (let t = lastT; t <= lastT + hor; t++) { hi.push({ x: X(t), y: m.f(t) + 2 * m.sigma }); lo.push({ x: X(t), y: m.f(t) - 2 * m.sigma }); }
+    if (m) { // droite de tendance de chaque courbe
+      const trend = [];
       for (let t = from; t <= lastT + hor; t++) trend.push({ x: X(t), y: m.trend(t) });
+      ds.push(line(p + " tendance", trend, hexA(c, 0.7), { borderDash: [1, 4], borderWidth: 2 }));
+    }
+    if (sel !== "ABC" && m) { // un seul produit : bande d'incertitude
+      const hi = [], lo = [];
+      for (let t = lastT; t <= lastT + hor; t++) { hi.push({ x: X(t), y: m.f(t) + 2 * m.sigma }); lo.push({ x: X(t), y: m.f(t) - 2 * m.sigma }); }
       ds.push(line("Borne haute", hi, "transparent", { _hideTip: true, pointHoverRadius: 0 }),
-        line("Intervalle ±2σ", lo, "transparent", { fill: "-1", backgroundColor: hexA(c, 0.15), _hideTip: true, pointHoverRadius: 0 }),
-        line("Tendance", trend, hexA(c, 0.7), { borderDash: [1, 4], borderWidth: 2 }));
+        line("Intervalle ±2σ", lo, "transparent", { fill: "-1", backgroundColor: hexA(c, 0.15), _hideTip: true, pointHoverRadius: 0 }));
     }
   }
   document.getElementById("lg-main").innerHTML = ps.map(p => `<span><span class="swatch" style="background:${col(p)}"></span>${p}</span>`).join("")
     + `<span><i class="ln"></i>observé</span><span><i class="ln dash"></i>prévu (zone grisée)</span>`
-    + (sel !== "ABC" ? `<span><i class="ln dot"></i>tendance</span>` : "");
+    + `<span><i class="ln dot"></i>tendance</span>`;
   const o = baseOptions("prix");
   o.scales.x.max = X(lastT + hor);
   o.plugins.nowLine = { show: true, x: X(lastT), color: css("--text-secondary"), shade: css("--shade"), label: `maintenant (tick ${X(lastT)})` };
@@ -672,7 +681,9 @@ function applyPlan(plan, sourceTxt) {
   const head = `<tr><th>Tranche</th><th>Ticks</th>` + ps.map(p => `<th><span class="swatch" style="background:${col(p)}"></span> ${p} achat / vente</th>`).join("") + `</tr>`;
   document.getElementById("sim-blocks").innerHTML = `<table>${head}` + plan.map((th, k) =>
     `<tr><td>${k + 1}</td><td class="nowrap">${k * L + 1}–${(k + 1) * L}${k === nb - 1 ? " et +" : ""}</td>`
-    + ps.map(p => `<td class="nowrap">${Math.round(th[p].b * 100)} / ${Math.round(th[p].s * 100)} %</td>`).join("") + `</tr>`).join("") + `</table>`;
+    + ps.map(p => models[p].trend(market.history.length - 1 + k * L + 1) <= 0
+        ? `<td class="nowrap muted">— (au plancher)</td>`
+        : `<td class="nowrap">${Math.round(th[p].b * 100)} / ${Math.round(th[p].s * 100)} %</td>`).join("") + `</tr>`).join("") + `</table>`;
   renderDecision(); renderSim();
 }
 
