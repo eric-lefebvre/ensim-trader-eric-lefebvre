@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-27T15:34:05Z",
+  "generated_at": "2026-11-27T19:02:10Z",
   "tick": 387,
   "market_generated_at": "2026-11-27T14:34:35Z",
   "market_commit": "02db61f5dfbdfde3b835a2366a7b19be63f3b164",
@@ -16,14 +16,14 @@
         "sell": 0.15
       },
       "C": {
-        "buy": 0.45,
+        "buy": 0.65,
         "sell": 0.9
       }
     },
     {
       "A": {
-        "buy": 0.95,
-        "sell": 0.95
+        "buy": 0.8,
+        "sell": 0.8
       },
       "B": {
         "buy": 0.3,
@@ -60,48 +60,48 @@
     "C": 1.0
   },
   "reasons": {
-    "A": "cours pr\u00e9vu 5.296 >= seuil de vente 5.125",
-    "B": "cours pr\u00e9vu 12.936 >= seuil de vente 12.774",
-    "C": "cours pr\u00e9vu 0.907 <= seuil d'achat 0.924"
+    "A": "cours pr\u00e9vu 5.293 >= seuil de vente 5.126",
+    "B": "cours pr\u00e9vu 12.910 >= seuil de vente 12.751",
+    "C": "cours pr\u00e9vu 0.907 <= seuil d'achat 0.973"
   },
   "alerts": {
     "A": [],
     "B": [],
     "C": []
   },
-  "expected_value": 50982.12,
-  "expected_value_fixed_thresholds": 50567.46,
+  "expected_value": 50532.14,
+  "expected_value_fixed_thresholds": 50126.9,
   "models": {
     "A": {
       "period": 47.75,
-      "level": 5.018286184206833,
-      "drift": -8.91887655778444e-05,
-      "amplitude": 0.14180344335907866,
-      "phase": -0.19982084696441046,
-      "noise": 0.015589945877846036,
-      "alert_score": 0.32973653552115023,
-      "alert_level": 0.4173880196470256
+      "level": 5.013471676983559,
+      "drift": -7.150153005166526e-05,
+      "amplitude": 0.1409754737035376,
+      "phase": -0.20547626547739198,
+      "noise": 0.016180879231411576,
+      "alert_score": 0.29925221250723427,
+      "alert_level": 0.44664509329437946
     },
     "B": {
       "period": 96.0,
-      "level": 8.025899558889277,
-      "drift": 0.009829788687972279,
-      "amplitude": 0.09386300905417869,
-      "phase": 1.4630142336989669,
-      "noise": 0.014798345601542995,
-      "alert_score": -0.6266360222730731,
-      "alert_level": -0.793210154776042
+      "level": 8.044872964259687,
+      "drift": 0.009767227149268035,
+      "amplitude": 0.09218161222397159,
+      "phase": 1.4642255747273523,
+      "noise": 0.015369757352803829,
+      "alert_score": -0.5166814745632046,
+      "alert_level": -0.7711663799450814
     },
     "C": {
       "period": 24.0,
-      "level": 3.002704278188851,
-      "drift": -0.005026520586973251,
-      "amplitude": 0.2292464907991047,
-      "phase": 3.02561939987684,
-      "noise": 0.015203832613531637,
-      "alert_score": 0.08025987073608719,
-      "alert_level": 0.10159477308365467
+      "level": 3.0028856809419975,
+      "drift": -0.0050268739715809505,
+      "amplitude": 0.22886114529849305,
+      "phase": 3.026751754514492,
+      "noise": 0.015364793267278689,
+      "alert_score": 0.08335305009789519,
+      "alert_level": 0.12440753745954505
     }
   },
-  "compute_seconds": 5.5
+  "compute_seconds": 2.8
 }

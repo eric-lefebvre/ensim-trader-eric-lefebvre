@@ -88,13 +88,13 @@ def fetch_feeds():
 
 
 # ---------------------------------------------------------------- modèle
-HALF_LIFE = 96    # poids d'un tick divisé par 2 tous les 96 ticks (≈ 1 cycle de B, ≈ 27 jours) : les événements
+HALF_LIFE = 72    # poids d'un tick divisé par 2 tous les 72 ticks (≈ 20 jours) : les événements
                   # récents comptent plus, mais la prévision reste la courbe du modèle (elle ne part pas du dernier point)
 # Alerte : moyenne des écarts au modèle sur TOUT l'historique, chaque tick pesant deux fois moins tous les
 # ALERT_HALF_LIFE ticks dans le passé (les événements récents comptent beaucoup plus), en « bruits habituels ».
 # Seuil calibré sur l'historique (calibrate_alert dans les commentaires du commit) : le pire tick passé est à 0,8.
 ALERT_HALF_LIFE = 8      # ≈ 2,2 jours
-ALERT_THRESHOLD = 0.79   # en bruits habituels : |score| >= 0,79 déclenche (calibré : pire tick passé à 0,80 au plus)
+ALERT_THRESHOLD = 0.67   # en bruits habituels : |score| >= 0,67 déclenche (calibré : pire tick passé à 0,80 au plus)
 
 class Model:
     def __init__(self, y, half_life=HALF_LIFE):

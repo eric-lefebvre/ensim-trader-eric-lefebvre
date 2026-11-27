@@ -290,10 +290,10 @@ function fitFixedPeriod(y, P, wt) {
 // P est trouvé par balayage ; niveau, dérive, k et φ par moindres carrés alternés.
 // Les événements récents comptent plus : poids d'un tick divisé par 2 tous les HALF_LIFE ticks dans le passé
 // (halfLife = null : tous les ticks pareils). Même calcul que Model dans scripts/algorithm.py.
-const HALF_LIFE = 96;  // événements récents plus importants (≈ 1 cycle de B), comme HALF_LIFE dans scripts/algorithm.py
+const HALF_LIFE = 72;  // événements récents plus importants (≈ 20 jours), comme HALF_LIFE dans scripts/algorithm.py
 // Alerte (comme ALERT_HALF_LIFE / ALERT_THRESHOLD dans scripts/algorithm.py) : moyenne pondérée des écarts au modèle
 // sur tout l'historique, les récents pesant beaucoup plus ; seuil calibré pour que le pire tick passé soit à 0,8.
-const ALERT_HALF_LIFE = 8, ALERT_THRESHOLD = 0.79;
+const ALERT_HALF_LIFE = 8, ALERT_THRESHOLD = 0.67;
 function fitModel(y, halfLife = HALF_LIFE) {
   const n = y.length;
   if (n < 12) return null;
