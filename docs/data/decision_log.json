@@ -1,6 +1,6 @@
 {
   "description": "Décision appliquée par le marché à chaque tick : la dernière version de decision.json publiée sur GitHub avant l'heure du tick. Valeurs dans [-1, 1] : +1 = acheter 100 u, -1 = vendre 100 u, 0 = rien.",
-  "generated_at": "2026-11-27T15:09:30Z",
+  "generated_at": "2026-11-27T15:27:58Z",
   "ticks": [
     {
       "tick": 349,
@@ -634,7 +634,7 @@
       "B": -1.0,
       "C": 1.0
     },
-    "decision_published_at": "2026-11-27T15:09:29Z",
+    "decision_published_at": "2026-11-27T15:27:57Z",
     "decision_commit": "commit de ce run"
   }
 }

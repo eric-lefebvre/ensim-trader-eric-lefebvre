@@ -88,12 +88,13 @@ def fetch_feeds():
 
 
 # ---------------------------------------------------------------- modèle
-HALF_LIFE = None  # prévisions : tout l'historique, chaque tick a le même poids (le présent ne les bouscule pas)
+HALF_LIFE = 96    # forme des cycles : poids d'un tick divisé par 2 tous les 96 ticks (≈ 1 cycle de B, ≈ 27 jours)
+RECENT_HALF_LIFE = 1   # la prévision part de l'écart récent au modèle (≈ dernier tick), qui s'estompe ensuite
 # Alerte : moyenne des écarts au modèle sur TOUT l'historique, chaque tick pesant deux fois moins tous les
 # ALERT_HALF_LIFE ticks dans le passé (les événements récents comptent beaucoup plus), en « bruits habituels ».
 # Seuil calibré sur l'historique (calibrate_alert dans les commentaires du commit) : le pire tick passé est à 0,8.
 ALERT_HALF_LIFE = 8      # ≈ 2,2 jours
-ALERT_THRESHOLD = 1.20   # en bruits habituels : |score| >= 1,20 déclenche
+ALERT_THRESHOLD = 0.79   # en bruits habituels : |score| >= 0,79 déclenche (calibré : pire tick passé à 0,80 au plus)
 
 class Model:
     def __init__(self, y, half_life=HALF_LIFE):
@@ -138,9 +139,19 @@ class Model:
         self.alert_score = float((wa * rel).sum() / wa.sum() / self.noise)       # en bruits habituels
         self.alert_level = self.alert_score / ALERT_THRESHOLD                     # distance au déclenchement (±1)
 
+        # Écart récent au modèle (dernier tick surtout) et sa mémoire d'un tick au suivant (≈ 0,5 : dans le marché,
+        # chaque prix garde la moitié du précédent). La prévision part de cet écart, qui s'estompe tick après tick.
+        wr = 0.5 ** ((n - 1 - t) / RECENT_HALF_LIFE)
+        self.last = n - 1
+        self.recent_dev = float((wr * rel).sum() / wr.sum())
+        kk = min(192, n - 1)
+        self.rho = max(0.0, float(np.corrcoef(rel[-kk - 1:-1], rel[-kk:])[0, 1])) if kk > 2 else 0.0
+
     def fa(self, t):
-        """Prévision utilisée pour décider : le modèle ajusté sur tout l'historique."""
-        return self.f(t)
+        """Prévision utilisée pour décider : modèle × (1 + écart récent × rho^h), h = ticks après le dernier."""
+        t = np.asarray(t, dtype=float)
+        h = np.maximum(t - self.last, 0)
+        return np.maximum(self.f(t) * (1 + self.recent_dev * self.rho ** h), 0.01)
 
     def trend(self, t):
         return np.maximum(self.a + self.b * np.asarray(t, dtype=float), 0)
@@ -483,7 +494,7 @@ def main():
         "alerts": st["alerts"],
         "expected_value": round(value, 2),
         "expected_value_fixed_thresholds": round(fixed_value, 2),
-        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi, "noise": m.noise, "alert_score": m.alert_score, "alert_level": m.alert_level} for p, m in models.items()},
+        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi, "noise": m.noise, "alert_score": m.alert_score, "alert_level": m.alert_level, "recent_dev": m.recent_dev, "rho": m.rho} for p, m in models.items()},
         "compute_seconds": round(time.time() - started, 1),
     }
     os.makedirs(os.path.dirname(STRATEGY_FILE), exist_ok=True)

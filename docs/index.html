@@ -290,10 +290,11 @@ function fitFixedPeriod(y, P, wt) {
 // P est trouvé par balayage ; niveau, dérive, k et φ par moindres carrés alternés.
 // Les événements récents comptent plus : poids d'un tick divisé par 2 tous les HALF_LIFE ticks dans le passé
 // (halfLife = null : tous les ticks pareils). Même calcul que Model dans scripts/algorithm.py.
-const HALF_LIFE = null;  // prévisions sur tout l'historique, chaque tick au même poids (comme HALF_LIFE en Python)
+const HALF_LIFE = 96;       // forme des cycles (≈ 1 cycle de B), comme HALF_LIFE dans scripts/algorithm.py
+const RECENT_HALF_LIFE = 1;  // la prévision part de l'écart récent au modèle, comme RECENT_HALF_LIFE
 // Alerte (comme ALERT_HALF_LIFE / ALERT_THRESHOLD dans scripts/algorithm.py) : moyenne pondérée des écarts au modèle
 // sur tout l'historique, les récents pesant beaucoup plus ; seuil calibré pour que le pire tick passé soit à 0,8.
-const ALERT_HALF_LIFE = 8, ALERT_THRESHOLD = 1.20;
+const ALERT_HALF_LIFE = 8, ALERT_THRESHOLD = 0.79;
 function fitModel(y, halfLife = HALF_LIFE) {
   const n = y.length;
   if (n < 12) return null;
@@ -337,7 +338,17 @@ function fitModel(y, halfLife = HALF_LIFE) {
   for (let t = 0; t < n; t++) { const q = Math.pow(0.5, (n - 1 - t) / ALERT_HALF_LIFE); aw += q; ar += q * rel[t]; }
   m.alertScore = ar / aw / m.noise;            // en bruits habituels
   m.alertLevel = m.alertScore / ALERT_THRESHOLD; // distance au déclenchement (±1)
-  m.fa = t => m.f(t); // prévision utilisée pour décider : le modèle ajusté sur tout l'historique
+  // Écart récent au modèle (dernier tick surtout) et sa mémoire d'un tick au suivant (≈ 0,5 dans le marché) :
+  // la prévision part de cet écart, qui s'estompe tick après tick (même calcul que Model.fa en Python).
+  let sw = 0, sr = 0;
+  for (let t = 0; t < n; t++) { const q = Math.pow(0.5, (n - 1 - t) / RECENT_HALF_LIFE); sw += q; sr += q * rel[t]; }
+  m.recentDev = sr / sw;
+  const kk = Math.min(192, n - 1), xs = rel.slice(-kk - 1, -1), ys = rel.slice(-kk);
+  const mx = xs.reduce((a2, v) => a2 + v, 0) / kk, my = ys.reduce((a2, v) => a2 + v, 0) / kk;
+  let cxy = 0, cxx = 0, cyy = 0;
+  for (let i = 0; i < kk; i++) { cxy += (xs[i] - mx) * (ys[i] - my); cxx += (xs[i] - mx) ** 2; cyy += (ys[i] - my) ** 2; }
+  m.rho = kk > 2 ? Math.max(0, cxy / Math.sqrt(cxx * cyy)) : 0;
+  m.fa = t => Math.max(m.f(t) * (1 + m.recentDev * Math.pow(m.rho, Math.max(t - (n - 1), 0))), 0.01);
   return m;
 }
 // Alerte par produit (mêmes règles que detect_alerts dans scripts/algorithm.py), quand |score| >= ALERT_THRESHOLD :
@@ -358,13 +369,14 @@ function detectAlerts() {
   }
   return (alertCache = out);
 }
-// Proximité de l'alerte : barre de -1 (alerte baisse) à +1 (alerte pic), remplie depuis le centre
+// Dérive par rapport à la prévision : score d'alerte ramené au seuil (±100 % = alerte), barre remplie depuis le centre,
+// en vert si le cours est au-dessus de la prévision, en rouge s'il est en dessous
 function alertGauge(m) {
-  const v = Math.max(-1, Math.min(1, m.alertLevel)), pc = Math.round(Math.abs(m.alertLevel) * 100);
-  const color = v < 0 ? "var(--bad)" : "#2a78d6", side = v < 0 ? "de l'alerte baisse" : "de l'alerte pic";
+  const v = Math.max(-1, Math.min(1, m.alertLevel)), pc = Math.round(m.alertLevel * 100);
+  const color = v < 0 ? "var(--bad)" : "var(--good)";
   const left = v < 0 ? 50 + v * 50 : 50, width = Math.abs(v) * 50;
   return `<span class="ag"><i style="left:${left}%;width:${width}%;background:${color}"></i><b></b></span>`
-    + `<span style="color:${pc >= 100 ? color : "inherit"}"><b>${pc} %</b></span> <span class="muted">${side}</span>`;
+    + `<b style="color:${color}">${pc > 0 ? "+" : ""}${pc} %</b>`;
 }
 // Phase du cycle au tick t0 : montant / descendant, ticks avant le prochain sommet / creux
 function nextTurn(m, t0) {
@@ -670,8 +682,8 @@ function renderDecision() {
     </tr>`);
     // Grande jauge : de la ligne des creux (gauche) à la ligne des sommets (droite), au prochain tick
     const low = z.tr * (1 - m.k), high = z.tr * (1 + m.k), pct = v => Math.min(100, Math.max(0, (v - low) / (high - low) * 100));
-    // flèche : du modèle au tick actuel vers le prévu au prochain tick (sens du cycle) ; point gris = cours réel actuel
-    const pB = pct(z.buyAt), pS = pct(z.sellAt), pNow = pct(H[lastT][p]), pPr = pct(pr), pFrom = pct(m.f(lastT)), right = turn.rising;
+    // flèche : du cours actuel vers le cours prévu au prochain tick (la prévision part du dernier cours réel)
+    const pB = pct(z.buyAt), pS = pct(z.sellAt), pNow = pct(H[lastT][p]), pPr = pct(pr), pFrom = pNow, right = pPr >= pNow;
     const L = v => `${v.toFixed(2)}%`;
     const anchor = v => v > 80 ? "transform:translateX(-100%)" : v < 20 ? "transform:none" : ""; // texte vers l'intérieur près des bords
     // seuils : le texte d'achat s'écrit à gauche de son trait, celui de vente à droite (ils ne se chevauchent jamais),
@@ -702,7 +714,7 @@ function renderDecision() {
       <div><div class="v ${cls}">${fmtSig(v)}</div><div class="a">${act}</div></div></div>`;
   }).join("");
   document.getElementById("justif").innerHTML =
-    `<tr><th>Produit</th><th>Cours actuel</th><th>Seuils achat / vente</th><th>Prochain retournement</th><th>Stock</th><th>Proximité des alertes<br><span class="muted">baisse ← 0 → pic</span></th></tr>`
+    `<tr><th>Produit</th><th>Cours actuel</th><th>Seuils achat / vente</th><th>Prochain retournement</th><th>Stock</th><th>Dérive par rapport à la prévision<br><span class="muted">±100 % = alerte</span></th></tr>`
     + rows.join("");
   document.getElementById("cycles").innerHTML = gauges.join("");
 }
@@ -717,7 +729,7 @@ function renderMarket() {
   for (const p of ps) {
     const m = models[p], c = col(p), obs = [], fut = [];
     for (let t = from; t < N; t++) obs.push({ x: X(t), y: H[t][p] });
-    if (m) for (let t = lastT; t <= lastT + hor; t++) fut.push({ x: X(t), y: m.fa(t) });
+    if (m) for (let t = lastT; t <= lastT + hor; t++) fut.push({ x: X(t), y: t === lastT ? H[t][p] : m.fa(t) });
     ds.push(line(p + " observé", obs, c), line(p + " prévu", fut, c, { borderDash: [5, 4] }));
     if (m) { // droite de tendance de chaque courbe
       const trend = [];
