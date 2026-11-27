@@ -106,18 +106,18 @@ th { color: var(--text-secondary); font-weight: 500; }
 .kpi.money .n { font-size: 40px; }
 .kpi .chg { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 /* Répartition du portefeuille */
-.alloc-wrap { display: grid; grid-template-columns: 280px 1fr; gap: 32px; align-items: center; }
+.alloc-wrap { display: grid; grid-template-columns: 200px 1fr; gap: 32px; align-items: center; }
 @media (max-width: 800px) { .alloc-wrap { grid-template-columns: 1fr; } }
-.donut { position: relative; height: 260px; }
+.donut { position: relative; height: 190px; }
 .donut .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
-.donut .center b { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.donut .center b { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .donut .center span { font-size: 13px; color: var(--text-secondary); }
 .alloc-row { display: grid; grid-template-columns: 110px 120px 110px 1fr; gap: 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .alloc-row:last-child { border-bottom: none; }
 @media (max-width: 800px) { .alloc-row { grid-template-columns: 90px 90px 1fr; } .alloc-row .track-cell { grid-column: 1 / -1; } }
 .alloc-row .nm { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
 .alloc-row .nm i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
-.alloc-row .pc { font-size: 36px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+.alloc-row .pc { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
 .alloc-row .val { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .alloc-row .val small { display: block; font-size: 12px; font-weight: 400; color: var(--text-muted); }
 .track { position: relative; height: 14px; border-radius: 7px; background: var(--grid); }
@@ -1044,7 +1044,7 @@ function ticksToDuration(n) {
 function renderAllocation() {
   const H = market.history, last = H.at(-1), ps = market.products;
   const parts = ps.map(p => ({ k: p, units: holdings?.products?.[p] ?? 0, v: (holdings?.products?.[p] ?? 0) * last[p], color: css("--series-" + p) }));
-  parts.push({ k: "Argent", v: holdings?.money ?? 0, color: css("--text-muted") });
+  parts.push({ k: "Réserve", v: holdings?.money ?? 0, color: css("--text-muted") });
   const total = parts.reduce((a, x) => a + x.v, 0) || 1;
   // anneau : composition du portefeuille, valeur totale au centre
   if (charts["c-alloc"]) charts["c-alloc"].destroy();
@@ -1061,7 +1061,7 @@ function renderAllocation() {
     const track = r ? `<div class="track"><div class="ok" style="left:${r[0] * 100}%;width:${(r[1] - r[0]) * 100}%"></div>
         <div class="fill" style="width:${Math.min(100, pc)}%;background:${x.color}"></div><div class="mk" style="left:${Math.min(100, pc)}%"></div></div>
         <div class="track-lbl"><span>0 %</span><span>${out ? `<b class="down">hors limites</b>` : `zone autorisée ${Math.round(r[0] * 100)}–${Math.round(r[1] * 100)} %`}</span><span>100 %</span></div>`
-      : `<span class="muted">${x.k === "Argent" ? "argent liquide" : "aucune règle"}</span>`;
+      : `<span class="muted">${x.k === "Réserve" ? "argent disponible" : "aucune règle"}</span>`;
     return `<div class="alloc-row"><div class="nm"><i style="background:${x.color}"></i>${x.k}</div>
       <div class="pc ${out ? "down" : ""}">${fmt(pc, 0)} %</div>
       <div class="val">${fmt(x.v, 0)}${x.units !== undefined ? `<small>${fmt(x.units, 0)} unités</small>` : ""}</div>
