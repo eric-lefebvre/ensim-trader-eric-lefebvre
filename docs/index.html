@@ -169,6 +169,8 @@ th { color: var(--text-secondary); font-weight: 500; }
 .topnav nav a { display: flex; align-items: center; padding: 0 14px; color: var(--text-secondary); text-decoration: none; font-weight: 500; border-bottom: 3px solid transparent; }
 .topnav nav a:hover { color: var(--text-primary); }
 .topnav nav a[aria-current="page"] { color: var(--text-primary); font-weight: 700; border-bottom-color: var(--series-A); }
+tr.me td { background: color-mix(in srgb, var(--series-A) 18%, transparent); font-weight: 700; }
+tr.base td { color: var(--text-muted); font-style: italic; }
 .topnav .right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .gauge { position: relative; display: inline-block; width: 90px; height: 6px; border-radius: 3px; background: var(--grid); vertical-align: middle; margin: 0 6px; }
 .gauge i { position: absolute; top: -3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--text-primary); border: 2px solid var(--surface-1); }
@@ -181,6 +183,7 @@ th { color: var(--text-secondary); font-weight: 500; }
     <nav>
       <a href="#decision" data-page="main" aria-current="page">Décision</a>
       <a href="#simulations" data-page="sim">Simulations</a>
+      <a href="#classement" data-page="rank">Classement</a>
     </nav>
     <div class="right"><span id="err"></span><button id="reload">Rafraîchir les données</button></div>
   </div>
@@ -302,6 +305,21 @@ th { color: var(--text-secondary); font-weight: 500; }
   </section>
   <div id="sim-charts"></div>
   </div>
+
+  <!-- Onglet Classement -->
+  <div id="tab-rank" hidden>
+    <div class="kpis" id="rank-kpis"></div>
+    <section class="card">
+      <h2>Gain par rapport à « ne rien faire »</h2>
+      <p class="muted" style="margin:2px 0 8px">Valeur du portefeuille de chaque trader moins celle d'un portefeuille qui n'a jamais tradé
+        (1000 d'argent + 1000 unités de A, B et C au prix actuel : <b id="rank-hold"></b>). C'est ce que la stratégie a réellement rapporté.</p>
+      <div class="chart-box" id="rank-box"><canvas id="c-rank"></canvas></div>
+    </section>
+    <section class="card">
+      <div class="table-wrap"><table id="rank-table"></table></div>
+      <p class="muted" id="rank-src" style="margin:8px 0 0"></p>
+    </section>
+  </div>
 </main>
 
 <script>
@@ -311,6 +329,10 @@ const DECISION_URL = "https://raw.githubusercontent.com/eric-lefebvre/ensim-trad
 // Seuils par bloc calculés par le workflow (scripts/algorithm.py) au dernier tick
 // Log des décisions appliquées à chaque tick (mis à jour par le workflow)
 const LOG_URL = "https://raw.githubusercontent.com/eric-lefebvre/ensim-trader-eric-lefebvre/main/docs/data/decision_log.json";
+// Classement de tous les traders (dépôt de l'organisateur, mis à jour à chaque tick)
+const LEADERBOARD_URL = "https://raw.githubusercontent.com/exofri/ensim-trade-center/refs/heads/main/docs/data/leaderboard.json";
+const ME = "eric-lefebvre";
+let leaderboard = null;
 const STRATEGY_URL = "https://raw.githubusercontent.com/eric-lefebvre/ensim-trader-eric-lefebvre/main/docs/data/strategy.json";
 
 let market = null, holdings = null, published = null, strategy = null, decisionLog = null, models = {};
@@ -758,6 +780,7 @@ function renderDecision() {
     const turn = nextTurn(m, lastT);
     rows.push(`<tr>
       <td><span class="swatch" style="background:${col(p)}"></span> <b>${p}</b></td>
+      <td class="nowrap">${turn.rising ? `<span class="up">▲ sommet dans ${fmt(turn.toPeak, 0)} t</span>` : `<span class="down">▼ creux dans ${fmt(turn.toTrough, 0)} t</span>`}<br><span class="muted">≈ ${ticksToDuration(turn.rising ? turn.toPeak : turn.toTrough)}</span></td>
       <td class="nowrap">${alertGauge(m)}</td>
       <td class="nowrap">${adjText(adj[p])}</td>
     </tr>`);
@@ -796,7 +819,7 @@ function renderDecision() {
       <div><div class="v ${cls}">${fmtSig(v)}</div><div class="a">${act}</div></div></div>`;
   }).join("");
   document.getElementById("justif").innerHTML =
-    `<tr><th>Produit</th><th>Dérive par rapport à la prévision<br><span class="muted">±100 % = alerte</span></th><th>Ajustement de la stratégie</th></tr>`
+    `<tr><th>Produit</th><th>Prochain retournement</th><th>Dérive par rapport à la prévision<br><span class="muted">±100 % = alerte</span></th><th>Ajustement de la stratégie</th></tr>`
     + rows.join("");
   document.getElementById("cycles").innerHTML = gauges.join("");
 }
@@ -1011,9 +1034,11 @@ async function load() {
     ]);
     strategy = await fetch(STRATEGY_URL + bust).then(r => r.json()).catch(() => null);
     decisionLog = await fetch(LOG_URL + bust).then(r => r.json()).catch(() => null);
+    leaderboard = await fetch(LEADERBOARD_URL + bust).then(r => r.json()).catch(() => null);
     const H = market.history;
     renderNextTick();
     renderAllocation();
+    if (!document.getElementById("tab-rank").hidden) renderRanking(); // page Classement ouverte directement
     models = {};
     for (const p of market.products) models[p] = fitModel(H.map(r => r[p]));
     alertCache = null;
@@ -1151,16 +1176,55 @@ document.getElementById("man-send").addEventListener("click", async () => {
   }
 });
 const renderAll = () => { if (!market) return; renderDecision(); renderMarket(); renderPortfolio(); renderSim(); };
+/* ---------- Classement ---------- */
+function renderRanking() {
+  if (!leaderboard || !market) return;
+  const last = market.history.at(-1), ps = market.products;
+  const hold = 1000 + ps.reduce((a, p) => a + 1000 * last[p], 0);   // portefeuille de départ jamais tradé, au prix actuel
+  const lb = [...leaderboard.leaderboard].sort((a, b) => b.total_value - a.total_value).map((r, i) => ({ ...r, rank: i + 1, gain: r.total_value - hold }));
+  const me = lb.find(r => r.id === ME), students = lb.filter(r => !r.baseline), myStudentRank = students.findIndex(r => r.id === ME) + 1;
+  const above = lb[me.rank - 2], below = lb[me.rank];
+  const signed = v => `${v >= 0 ? "+" : "−"}${fmt(Math.abs(v), 0)}`;
+  document.getElementById("rank-hold").textContent = fmt(hold, 0);
+  document.getElementById("rank-kpis").innerHTML = `
+    <div class="card kpi money" style="margin:0"><div class="l">Ma place</div><div class="n">${me.rank}<span style="font-size:22px;font-weight:600"> / ${lb.length}</span></div>
+      <div class="d">${myStudentRank}e sur ${students.length} élèves (hors traders aléatoires)</div></div>
+    <div class="card kpi" style="margin:0"><div class="l">Mon gain vs « ne rien faire »</div><div class="n ${me.gain >= 0 ? "up" : "down"}">${signed(me.gain)}</div><div class="d">valeur ${fmt(me.total_value, 0)}</div></div>
+    <div class="card kpi" style="margin:0"><div class="l">Pour gagner une place</div><div class="n">${above ? signed(above.total_value - me.total_value) : "—"}</div><div class="d">${above ? `derrière ${above.name} (${above.rank}e)` : "je suis 1er"}</div></div>
+    <div class="card kpi" style="margin:0"><div class="l">Avance sur le suivant</div><div class="n">${below ? signed(me.total_value - below.total_value) : "—"}</div><div class="d">${below ? `devant ${below.name} (${below.rank}e)` : "je suis dernier"}</div></div>`;
+  // barres horizontales : gain de chaque trader, moi en couleur, les traders aléatoires en clair
+  const H = Math.max(320, lb.length * 26);
+  document.getElementById("rank-box").style.height = H + "px";
+  const grid = css("--grid"), txt = css("--text-secondary"), meCol = css("--series-A");
+  const colors = lb.map(r => r.id === ME ? meCol : r.baseline ? hexA(css("--series-total").startsWith("#") ? css("--series-total") : "#888888", 0.18) : css("--text-muted"));
+  if (charts["c-rank"]) charts["c-rank"].destroy();
+  charts["c-rank"] = new Chart(document.getElementById("c-rank"), {
+    type: "bar",
+    data: { labels: lb.map(r => `${r.rank}. ${r.name}${r.baseline ? " (aléatoire)" : ""}`), datasets: [{ data: lb.map(r => r.gain), backgroundColor: colors, borderRadius: 4, barPercentage: 0.75 }] },
+    options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => `gain ${signed(i.parsed.x)} · valeur ${fmt(lb[i.dataIndex].total_value, 0)}` } } },
+      scales: { x: { grid: { color: grid }, ticks: { color: txt }, title: { display: true, text: "gain par rapport à « ne rien faire »", color: txt } },
+                y: { grid: { display: false }, ticks: { color: (c) => lb[c.index]?.id === ME ? meCol : txt, font: (c) => ({ weight: lb[c.index]?.id === ME ? "bold" : "normal" }) } } } },
+  });
+  document.getElementById("rank-table").innerHTML =
+    `<tr><th>Rang</th><th class="reason">Trader</th><th>Valeur</th><th>Gain vs « ne rien faire »</th><th>Écart avec moi</th></tr>`
+    + lb.map(r => `<tr class="${r.id === ME ? "me" : r.baseline ? "base" : ""}"><td>${r.rank}</td><td class="reason">${r.id === ME ? "▶ " : ""}${r.name}${r.baseline ? " (aléatoire)" : ""}</td>
+      <td>${fmt(r.total_value, 0)}</td><td class="${r.gain >= 0 ? "up" : "down"}">${signed(r.gain)}</td>
+      <td>${r.id === ME ? "—" : signed(r.total_value - me.total_value)}</td></tr>`).join("");
+  document.getElementById("rank-src").textContent = `Source : leaderboard.json du dépôt de l'organisateur, mis à jour le ${new Date(leaderboard.generated_at).toLocaleString("fr-FR")}.`;
+}
+
 // Navigation : la page affichée suit l'adresse (#decision ou #simulations) ; liens et bouton « retour » fonctionnent
 function showPage() {
-  const page = location.hash === "#simulations" ? "sim" : "main";
+  const page = location.hash === "#simulations" ? "sim" : location.hash === "#classement" ? "rank" : "main";
   for (const a of document.querySelectorAll(".topnav nav a")) {
     if (a.dataset.page === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
   document.getElementById("tab-main").hidden = page !== "main";
   document.getElementById("tab-sim").hidden = page !== "sim";
+  document.getElementById("tab-rank").hidden = page !== "rank";
   window.scrollTo(0, 0);
-  if (market) page === "sim" ? renderSim() : (renderMarket(), renderPortfolio());
+  if (market) page === "sim" ? renderSim() : page === "rank" ? renderRanking() : (renderMarket(), renderPortfolio());
 }
 window.addEventListener("hashchange", showPage);
 showPage();
