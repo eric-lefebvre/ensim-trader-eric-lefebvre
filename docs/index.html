@@ -106,20 +106,23 @@ th { color: var(--text-secondary); font-weight: 500; }
 .kpi.money .n { font-size: 40px; }
 .kpi .chg { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 /* Répartition du portefeuille */
-.alloc-wrap { display: grid; grid-template-columns: 200px 1fr; gap: 32px; align-items: center; }
-@media (max-width: 800px) { .alloc-wrap { grid-template-columns: 1fr; } }
-.donut { position: relative; height: 190px; }
+.alloc-wrap { display: grid; grid-template-columns: 220px 220px 1fr; gap: 32px; align-items: start; }
+@media (max-width: 900px) { .alloc-wrap { grid-template-columns: 1fr 1fr; } .alloc-wrap .rules { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .alloc-wrap { grid-template-columns: 1fr; } }
+.donut-box h3 { font-size: 14px; font-weight: 600; color: var(--text-secondary); margin: 0 0 6px; text-align: center; }
+.donut { position: relative; height: 180px; }
 .donut .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
-.donut .center b { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.donut .center span { font-size: 13px; color: var(--text-secondary); }
-.alloc-row { display: grid; grid-template-columns: 110px 120px 110px 1fr; gap: 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
-.alloc-row:last-child { border-bottom: none; }
-@media (max-width: 800px) { .alloc-row { grid-template-columns: 90px 90px 1fr; } .alloc-row .track-cell { grid-column: 1 / -1; } }
-.alloc-row .nm { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-.alloc-row .nm i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
-.alloc-row .pc { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
-.alloc-row .val { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.alloc-row .val small { display: block; font-size: 12px; font-weight: 400; color: var(--text-muted); }
+.donut .center b { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.donut .center span { font-size: 12px; color: var(--text-secondary); }
+.dlegend { margin-top: 10px; display: grid; gap: 4px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.dlegend div { display: grid; grid-template-columns: 14px 1fr auto; gap: 6px; align-items: center; }
+.dlegend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.dlegend b { font-weight: 600; }
+.rules h3 { font-size: 14px; font-weight: 600; color: var(--text-secondary); margin: 0 0 10px; }
+.rule-row { display: grid; grid-template-columns: 70px 60px 1fr; gap: 12px; align-items: center; margin-bottom: 18px; }
+.rule-row .nm { font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.rule-row .nm i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.rule-row .pc { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .track { position: relative; height: 14px; border-radius: 7px; background: var(--grid); }
 .track .ok { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--good) 30%, transparent); border-left: 2px solid var(--good); border-right: 2px solid var(--good); }
 .track .fill { position: absolute; left: 0; top: 4px; height: 6px; border-radius: 3px; }
@@ -226,8 +229,13 @@ th { color: var(--text-secondary); font-weight: 500; }
   <h2 class="section-title">Répartition du portefeuille</h2>
   <section class="card">
     <div class="alloc-wrap">
-      <div class="donut"><canvas id="c-alloc"></canvas><div class="center"><b id="alloc-total"></b><span>valeur totale</span></div></div>
-      <div id="alloc"></div>
+      <div class="donut-box"><h3>Valeur</h3>
+        <div class="donut"><canvas id="c-alloc"></canvas><div class="center"><b id="alloc-total"></b><span>valeur totale</span></div></div>
+        <div class="dlegend" id="lg-alloc"></div></div>
+      <div class="donut-box"><h3>Unités possédées</h3>
+        <div class="donut"><canvas id="c-units"></canvas><div class="center"><b id="units-total"></b><span>unités</span></div></div>
+        <div class="dlegend" id="lg-units"></div></div>
+      <div class="rules"><h3>Règle d'allocation (part de la valeur totale)</h3><div id="alloc"></div></div>
     </div>
   </section>
 
@@ -739,7 +747,7 @@ function renderDecision() {
         : q > 0.05 ? `Cours prévu ${fmt(pr, 3)} ≤ seuil d'achat ${fmt(z.buyAt, 3)}, mais il ne reste que ${fmt(moneyBefore, 0)} d'argent → <b>acheter ${fmt(q, 0)} u seulement</b>.`
         : `Zone d'achat, mais plus d'argent disponible → rien.`;
     } else if (z.tr > 0 && pr >= z.sellAt) {
-      q = -Math.min(100, units[p], allocSellCap(p, units[p], pr, totalNow())); money -= q * pr; units[p] += q;
+      q = -Math.min(100, units[p], (blocked.has(p) ? Infinity : allocSellCap(p, units[p], pr, totalNow()))); money -= q * pr; units[p] += q;
       reason = -q >= 99.95 ? `Cours prévu ${fmt(pr, 3)} ≥ seuil de vente ${fmt(z.sellAt, 3)} → <b>vendre 100 u</b>.`
         : -q > 0.05 ? `Cours prévu ${fmt(pr, 3)} ≥ seuil de vente ${fmt(z.sellAt, 3)}, stock restant ${fmt(-q, 0)} u → <b>tout vendre</b>.`
         : `Zone de vente, mais plus de stock → rien.`;
@@ -1046,27 +1054,35 @@ function renderAllocation() {
   const parts = ps.map(p => ({ k: p, units: holdings?.products?.[p] ?? 0, v: (holdings?.products?.[p] ?? 0) * last[p], color: css("--series-" + p) }));
   parts.push({ k: "Réserve", v: holdings?.money ?? 0, color: css("--text-muted") });
   const total = parts.reduce((a, x) => a + x.v, 0) || 1;
-  // anneau : composition du portefeuille, valeur totale au centre
-  if (charts["c-alloc"]) charts["c-alloc"].destroy();
-  charts["c-alloc"] = new Chart(document.getElementById("c-alloc"), {
-    type: "doughnut",
-    data: { labels: parts.map(x => x.k), datasets: [{ data: parts.map(x => x.v), backgroundColor: parts.map(x => x.color), borderColor: css("--surface-1"), borderWidth: 3 }] },
-    options: { responsive: true, maintainAspectRatio: false, cutout: "68%", animation: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => `${i.label} : ${fmt(i.parsed, 0)} (${fmt(i.parsed / total * 100, 1)} %)` } } } },
-  });
+  const ring = (id, items, value, totalOf, unit) => {
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(document.getElementById(id), {
+      type: "doughnut",
+      data: { labels: items.map(x => x.k), datasets: [{ data: items.map(value), backgroundColor: items.map(x => x.color), borderColor: css("--surface-1"), borderWidth: 3 }] },
+      options: { responsive: true, maintainAspectRatio: false, cutout: "68%", animation: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => `${i.label} : ${fmt(i.parsed, 0)}${unit} (${fmt(i.parsed / totalOf * 100, 1)} %)` } } } },
+    });
+  };
+  const legend = (items, value, totalOf, unit) => items.map(x => `<div><i style="background:${x.color}"></i><span>${x.k}</span>`
+    + `<span><b>${fmt(value(x), 0)}</b>${unit} · ${fmt(value(x) / totalOf * 100, 0)} %</span></div>`).join("");
+  // 1) valeur : A, B, C et réserve
+  ring("c-alloc", parts, x => x.v, total, "");
   document.getElementById("alloc-total").textContent = fmt(total, 0);
-  // une ligne par élément : part, valeur, et pour A et B la réglette 0-100 % avec la zone autorisée (20-75 %)
-  document.getElementById("alloc").innerHTML = parts.map(x => {
-    const pc = x.v / total * 100, r = ALLOC[x.k], out = r && (pc < r[0] * 100 || pc > r[1] * 100);
-    const track = r ? `<div class="track"><div class="ok" style="left:${r[0] * 100}%;width:${(r[1] - r[0]) * 100}%"></div>
-        <div class="fill" style="width:${Math.min(100, pc)}%;background:${x.color}"></div><div class="mk" style="left:${Math.min(100, pc)}%"></div></div>
-        <div class="track-lbl"><span>0 %</span><span>${out ? `<b class="down">hors limites</b>` : `zone autorisée ${Math.round(r[0] * 100)}–${Math.round(r[1] * 100)} %`}</span><span>100 %</span></div>`
-      : `<span class="muted">${x.k === "Réserve" ? "argent disponible" : "aucune règle"}</span>`;
-    return `<div class="alloc-row"><div class="nm"><i style="background:${x.color}"></i>${x.k}</div>
+  document.getElementById("lg-alloc").innerHTML = legend(parts, x => x.v, total, "");
+  // 2) unités possédées : A, B, C
+  const prods = parts.filter(x => x.units !== undefined), totalUnits = prods.reduce((a, x) => a + x.units, 0) || 1;
+  ring("c-units", prods, x => x.units, totalUnits, " u");
+  document.getElementById("units-total").textContent = fmt(totalUnits, 0);
+  document.getElementById("lg-units").innerHTML = legend(prods, x => x.units, totalUnits, " u");
+  // 3) règle d'allocation de A et B : réglette 0-100 % avec la zone autorisée (20-75 %)
+  document.getElementById("alloc").innerHTML = parts.filter(x => ALLOC[x.k]).map(x => {
+    const pc = x.v / total * 100, r = ALLOC[x.k], out = pc < r[0] * 100 || pc > r[1] * 100;
+    return `<div class="rule-row"><div class="nm"><i style="background:${x.color}"></i>${x.k}</div>
       <div class="pc ${out ? "down" : ""}">${fmt(pc, 0)} %</div>
-      <div class="val">${fmt(x.v, 0)}${x.units !== undefined ? `<small>${fmt(x.units, 0)} unités</small>` : ""}</div>
-      <div class="track-cell">${track}</div></div>`;
-  }).join("");
+      <div><div class="track"><div class="ok" style="left:${r[0] * 100}%;width:${(r[1] - r[0]) * 100}%"></div>
+        <div class="fill" style="width:${Math.min(100, pc)}%;background:${x.color}"></div><div class="mk" style="left:${Math.min(100, pc)}%"></div></div>
+        <div class="track-lbl"><span>0 %</span><span>${out ? `<b class="down">hors limites</b>` : `zone autorisée ${Math.round(r[0] * 100)}–${Math.round(r[1] * 100)} %`}</span><span>100 %</span></div></div></div>`;
+  }).join("") + `<p class="muted" style="margin:0">Sous 20 % autorisé en cas d'alerte de baisse sur le produit. Aucune règle pour C.</p>`;
 }
 // Chiffres de l'en-tête (mis à jour chaque minute) : temps depuis le dernier tick, temps estimé avant le
 // prochain (dernier tick + écart médian des 30 derniers ticks), âge de la décision publiée.

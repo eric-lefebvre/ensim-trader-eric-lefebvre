@@ -38,7 +38,8 @@ GRID_S = np.tile(GRID, 21)
 MIN_MONEY_RESERVE = 50 # never let a buy signal spend below this much money
 
 # Règle d'allocation : A et B doivent chacun représenter entre 20 % et 75 % du portefeuille total
-# (argent + stocks × prix). Un achat est réduit s'il ferait dépasser 75 %, une vente s'il ferait passer sous 20 %.
+# (argent + stocks × prix). Un achat est réduit s'il ferait dépasser 75 %, une vente s'il ferait passer sous 20 %
+# (sauf en cas d'alerte de baisse sur le produit : on peut alors descendre sous 20 %).
 # Aucune règle pour C.
 ALLOC = {"A": (0.20, 0.75), "B": (0.20, 0.75)}
 
@@ -338,6 +339,8 @@ def next_decision(models, ps, plan, last, money, units, blocked=()):
         buy_at, sell_at = low + b * (tr - low), high - s * (high - tr)
         q = 0.0
         cap_b, cap_s = alloc_caps(p, units[p], pr, money + sum(units[x] * prices[x] for x in ps))
+        if p in blocked:      # alerte de baisse sur p : on a le droit de descendre sous 20 % du portefeuille
+            cap_s = np.inf
         if tr > 0 and pr <= buy_at and p in blocked:
             reasons[p] = f"cours prévu {pr:.3f} <= seuil d'achat {buy_at:.3f}, mais alerte de baisse : achats coupés"
         elif tr > 0 and pr <= buy_at:
