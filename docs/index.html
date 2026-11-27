@@ -106,15 +106,25 @@ th { color: var(--text-secondary); font-weight: 500; }
 .kpi.money .n { font-size: 40px; }
 .kpi .chg { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 /* Répartition du portefeuille */
-.alloc-bar { display: flex; height: 30px; border-radius: 8px; overflow: hidden; margin: 0 0 16px; gap: 2px; }
-.alloc-bar i { display: flex; align-items: center; justify-content: center; height: 100%; font-style: normal; font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; }
-.alloc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-@media (max-width: 700px) { .alloc { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.alloc > div { border: 1px solid var(--border); border-left: 6px solid var(--c); border-radius: 10px; padding: 12px 16px; }
-.alloc .nm { font-size: 18px; font-weight: 700; }
-.alloc .pc { font-size: 46px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.05; margin: 4px 0 2px; }
-.alloc .val { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.alloc .lim { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+.alloc-wrap { display: grid; grid-template-columns: 280px 1fr; gap: 32px; align-items: center; }
+@media (max-width: 800px) { .alloc-wrap { grid-template-columns: 1fr; } }
+.donut { position: relative; height: 260px; }
+.donut .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.donut .center b { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.donut .center span { font-size: 13px; color: var(--text-secondary); }
+.alloc-row { display: grid; grid-template-columns: 110px 120px 110px 1fr; gap: 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.alloc-row:last-child { border-bottom: none; }
+@media (max-width: 800px) { .alloc-row { grid-template-columns: 90px 90px 1fr; } .alloc-row .track-cell { grid-column: 1 / -1; } }
+.alloc-row .nm { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.alloc-row .nm i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+.alloc-row .pc { font-size: 36px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+.alloc-row .val { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.alloc-row .val small { display: block; font-size: 12px; font-weight: 400; color: var(--text-muted); }
+.track { position: relative; height: 14px; border-radius: 7px; background: var(--grid); }
+.track .ok { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--good) 30%, transparent); border-left: 2px solid var(--good); border-right: 2px solid var(--good); }
+.track .fill { position: absolute; left: 0; top: 4px; height: 6px; border-radius: 3px; }
+.track .mk { position: absolute; top: -5px; width: 4px; height: 24px; margin-left: -2px; border-radius: 2px; background: var(--text-primary); }
+.track-lbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 .kpi .l { font-size: 13px; color: var(--text-secondary); }
 .kpi .n { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; margin: 4px 0; }
 .kpi .d { font-size: 12px; color: var(--text-muted); }
@@ -209,8 +219,10 @@ th { color: var(--text-secondary); font-weight: 500; }
   <!-- Répartition du portefeuille -->
   <h2 class="section-title">Répartition du portefeuille</h2>
   <section class="card">
-    <div class="alloc-bar" id="alloc-bar" style="margin-top:0"></div>
-    <div class="alloc" id="alloc"></div>
+    <div class="alloc-wrap">
+      <div class="donut"><canvas id="c-alloc"></canvas><div class="center"><b id="alloc-total"></b><span>valeur totale</span></div></div>
+      <div id="alloc"></div>
+    </div>
   </section>
 
   <!-- 2. Cours du marché -->
@@ -1031,16 +1043,29 @@ function ticksToDuration(n) {
 // avec la règle d'allocation de A et B (entre 20 % et 75 %)
 function renderAllocation() {
   const H = market.history, last = H.at(-1), ps = market.products;
-  const parts = ps.map(p => ({ k: p, v: (holdings?.products?.[p] ?? 0) * last[p], color: css("--series-" + p) }));
+  const parts = ps.map(p => ({ k: p, units: holdings?.products?.[p] ?? 0, v: (holdings?.products?.[p] ?? 0) * last[p], color: css("--series-" + p) }));
   parts.push({ k: "Argent", v: holdings?.money ?? 0, color: css("--text-muted") });
   const total = parts.reduce((a, x) => a + x.v, 0) || 1;
-  document.getElementById("alloc-bar").innerHTML = parts.map(x => { const pc = x.v / total * 100;
-    return `<i style="width:${pc.toFixed(2)}%;background:${x.color}" title="${x.k} : ${fmt(pc, 1)} %">${pc >= 8 ? `${x.k} ${fmt(pc, 0)} %` : ""}</i>`; }).join("");
+  // anneau : composition du portefeuille, valeur totale au centre
+  if (charts["c-alloc"]) charts["c-alloc"].destroy();
+  charts["c-alloc"] = new Chart(document.getElementById("c-alloc"), {
+    type: "doughnut",
+    data: { labels: parts.map(x => x.k), datasets: [{ data: parts.map(x => x.v), backgroundColor: parts.map(x => x.color), borderColor: css("--surface-1"), borderWidth: 3 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: "68%", animation: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => `${i.label} : ${fmt(i.parsed, 0)} (${fmt(i.parsed / total * 100, 1)} %)` } } } },
+  });
+  document.getElementById("alloc-total").textContent = fmt(total, 0);
+  // une ligne par élément : part, valeur, et pour A et B la réglette 0-100 % avec la zone autorisée (20-75 %)
   document.getElementById("alloc").innerHTML = parts.map(x => {
-    const pc = x.v / total * 100, r = ALLOC[x.k];
-    const lim = r ? `règle ${Math.round(r[0] * 100)}–${Math.round(r[1] * 100)} %${pc < r[0] * 100 || pc > r[1] * 100 ? ` · <span class="down">hors limites</span>` : ""}` : (x.k === "Argent" ? "liquide" : "aucune règle");
-    return `<div style="--c:${x.color}"><div class="nm">${x.k}</div>
-      <div class="pc">${fmt(pc, 0)} %</div><div class="val">${fmt(x.v, 0)}</div><div class="lim">${lim}</div></div>`;
+    const pc = x.v / total * 100, r = ALLOC[x.k], out = r && (pc < r[0] * 100 || pc > r[1] * 100);
+    const track = r ? `<div class="track"><div class="ok" style="left:${r[0] * 100}%;width:${(r[1] - r[0]) * 100}%"></div>
+        <div class="fill" style="width:${Math.min(100, pc)}%;background:${x.color}"></div><div class="mk" style="left:${Math.min(100, pc)}%"></div></div>
+        <div class="track-lbl"><span>0 %</span><span>${out ? `<b class="down">hors limites</b>` : `zone autorisée ${Math.round(r[0] * 100)}–${Math.round(r[1] * 100)} %`}</span><span>100 %</span></div>`
+      : `<span class="muted">${x.k === "Argent" ? "argent liquide" : "aucune règle"}</span>`;
+    return `<div class="alloc-row"><div class="nm"><i style="background:${x.color}"></i>${x.k}</div>
+      <div class="pc ${out ? "down" : ""}">${fmt(pc, 0)} %</div>
+      <div class="val">${fmt(x.v, 0)}${x.units !== undefined ? `<small>${fmt(x.units, 0)} unités</small>` : ""}</div>
+      <div class="track-cell">${track}</div></div>`;
   }).join("");
 }
 // Chiffres de l'en-tête (mis à jour chaque minute) : temps depuis le dernier tick, temps estimé avant le
