@@ -672,7 +672,7 @@ function renderDecision() {
   const H = market.history, lastT = H.length - 1, ps = productsOk(), t0 = H[0].t;
   const th = readThresholds(ps);
   let money = startMoney();
-  const units = startUnits(ps), dec = {}, rows = [], gauges = [], adj = {};
+  const units = startUnits(ps), dec = {}, rows = [], gauges = [], adj = {}, base = {};
   const alerts = detectAlerts(), blocked = new Set(ps.filter(p => alerts[p].some(a => a.blockBuy)));
   const all = ps.flatMap(p => alerts[p]);
   document.getElementById("alerts").innerHTML = all.map(a =>
@@ -683,6 +683,7 @@ function renderDecision() {
     let nb2 = Math.min(1, th[p].b + bB), ns2 = Math.min(1, th[p].s + sB);
     if (SELL_LE_BUY.has(p)) ns2 = Math.min(ns2, nb2);
     adj[p] = [mult, nb2 - th[p].b, ns2 - th[p].s]; // ajustement réellement appliqué (après plafonds)
+    base[p] = th[p]; // seuils optimisés (ceux de « Trouver les meilleurs seuils »), avant ajustement
     th[p] = { b: nb2, s: ns2 };
     const m = models[p], pr = m.fa(lastT + 1), z = zones(m, lastT + 1, th[p]), moneyBefore = money;
     let q = 0, reason;
@@ -706,7 +707,9 @@ function renderDecision() {
     rows.push(`<tr>
       <td><span class="swatch" style="background:${col(p)}"></span> <b>${p}</b></td>
       <td class="nowrap">${fmt(H[lastT][p], 3)}</td>
-      <td class="nowrap">${fmt(z.buyAt, 3)} / ${fmt(z.sellAt, 3)}<br><span class="muted">${Math.round(th[p].b * 100)} % / ${Math.round(th[p].s * 100)} %</span></td>
+      <td class="nowrap">${fmt(z.buyAt, 3)} / ${fmt(z.sellAt, 3)}<br><span class="muted">optimisés ${Math.round(base[p].b * 100)} % / ${Math.round(base[p].s * 100)} %${
+        Math.round(base[p].b * 100) !== Math.round(th[p].b * 100) || Math.round(base[p].s * 100) !== Math.round(th[p].s * 100)
+          ? ` → appliqués ${Math.round(th[p].b * 100)} % / ${Math.round(th[p].s * 100)} %` : ""}</span></td>
       <td class="nowrap">${turn.rising ? `sommet dans ${fmt(turn.toPeak, 0)} t` : `creux dans ${fmt(turn.toTrough, 0)} t`}</td>
       <td class="nowrap">${fmt(startUnits([p])[p], 0)} u</td>
       <td class="nowrap">${alertGauge(m)}</td>
