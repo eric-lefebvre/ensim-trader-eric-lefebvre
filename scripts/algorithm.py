@@ -14,7 +14,8 @@ Décision automatique pour l'ENSIM Trade Center (même algorithme que le dashboa
 Écrit decision.json (lu par le marché) et docs/data/strategy.json (lu par le dashboard).
 Ne fait rien si le marché n'a pas avancé depuis le dernier calcul (sauf FORCE=1).
 """
-import json, math, os, time
+import json, math, os, subprocess, time
+from datetime import datetime, timezone
 import numpy as np
 import requests
 
@@ -25,6 +26,7 @@ HOLDINGS_PATH = f"traders/{TRADER}/holdings.json"
 MARKET_URL = f"https://raw.githubusercontent.com/{ORGANIZER}/refs/heads/main/{MARKET_PATH}"
 HOLDINGS_URL = f"https://raw.githubusercontent.com/{ORGANIZER}/refs/heads/main/{HOLDINGS_PATH}"
 STRATEGY_FILE = "docs/data/strategy.json"
+LOG_FILE = "docs/data/decision_log.json"
 N_BLOCKS = 3          # horizon de recherche = 3 tranches (288 ticks avec des tranches de 96)
 LOT = 100             # unités max par tick et par produit (règle du marché)
 GRID = np.round(np.arange(21) * 0.05, 2)          # seuils 0 %, 5 %, ..., 100 %
@@ -315,6 +317,68 @@ def compute_signal(prices, product, history, holdings, products):
     return max(-1.0, min(1.0, _strategy_cache["s"]["signals"].get(product, 0.0)))
 
 
+# ---------------------------------------------------------------- log des décisions
+def _utc(s):
+    return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(timezone.utc)
+
+def published_decisions():
+    """Versions de decision.json publiées, d'après l'historique git : [(heure de publication, sha, décision)].
+    Un commit local poussé avec une fusion est daté de la fusion (le marché ne pouvait pas le voir avant)."""
+    git = lambda *a: subprocess.run(["git", *a], capture_output=True, text=True, encoding="utf8", check=True).stdout
+    out = []
+    for line in git("log", "--full-history", "--format=%H %cI %P", "--", "decision.json").splitlines():
+        sha, date, *parents = line.split()
+        if len(parents) <= 1:
+            out.append([_utc(date), sha, json.loads(git("show", f"{sha}:decision.json"))])
+    for line in git("log", "--merges", "--format=%H %cI %P").splitlines():
+        _, date, first, *_ = line.split()
+        for c in out:
+            if c[1] == first and c[0] < _utc(date):
+                c[0] = _utc(date)
+    return sorted(out, key=lambda c: c[0])
+
+def update_decision_log(market, new_decision):
+    """Ajoute à la fin du log les ticks pas encore notés, avec la décision réellement appliquée par le marché
+    (la dernière publiée sur GitHub avant l'heure du tick), puis met à jour la décision en attente.
+    Les lignes déjà écrites ne sont jamais modifiées (market.json ne garde que 500 ticks)."""
+    log = {"description": ("Décision appliquée par le marché à chaque tick : la dernière version de decision.json publiée "
+                           "sur GitHub avant l'heure du tick. Valeurs dans [-1, 1] : +1 = acheter 100 u, -1 = vendre 100 u, 0 = rien."),
+           "ticks": []}
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, encoding="utf8") as fh:
+            log = json.load(fh)
+    try:
+        commits = published_decisions()
+    except Exception as e:
+        print(f"Log non mis à jour (historique git illisible : {e})")
+        return
+    last_logged = log["ticks"][-1]["tick"] if log["ticks"] else -1
+    added = 0
+    for row in market["history"]:
+        if row["t"] <= last_logged:
+            continue
+        active = [c for c in commits if c[0] <= _utc(row["timestamp"])]
+        if not active:
+            continue
+        when, sha, dec = active[-1]
+        log["ticks"].append({
+            "tick": row["t"], "tick_time": row["timestamp"],
+            "decision": {p: dec.get(p, 0.0) for p in market["products"]},
+            "prices": {p: row[p] for p in market["products"]},
+            "decision_published_at": when.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "decision_commit": sha[:7],
+        })
+        added += 1
+    log["pending"] = {"tick": market["history"][-1]["t"] + 1,
+                      "decision": {p: new_decision[p] for p in market["products"]},
+                      "decision_published_at": new_decision["updated_at"],
+                      "decision_commit": "commit de ce run"}
+    log["generated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with open(LOG_FILE, "w", encoding="utf8") as fh:
+        json.dump(log, fh, indent=2, ensure_ascii=False)
+    print(f"Log des décisions : {added} tick(s) ajouté(s), dernier tick noté {log['ticks'][-1]['tick'] if log['ticks'] else '-'}")
+
+
 # ---------------------------------------------------------------- main
 def main():
     market, holdings, sha = fetch_feeds()
@@ -343,6 +407,7 @@ def main():
     decision["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     with open("decision.json", "w") as fh:
         json.dump(decision, fh, indent=2)
+    update_decision_log(market, decision)
 
     st = _strategy_cache.get("s")
     if st is None:
