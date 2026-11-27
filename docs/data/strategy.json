@@ -1,19 +1,19 @@
 {
-  "generated_at": "2026-11-27T00:37:24Z",
-  "tick": 385,
-  "market_generated_at": "2026-11-26T22:44:14Z",
-  "market_commit": "e4eb4fb3398477f1b6ff77938d88e0cdc9151532",
+  "generated_at": "2026-11-27T09:42:25Z",
+  "tick": 386,
+  "market_generated_at": "2026-11-27T04:41:52Z",
+  "market_commit": "15c6d1532235f9da58fd2fc938bd337e1872f866",
   "block_ticks": 96,
   "blocks": 5,
   "plan": [
     {
       "A": {
         "buy": 0.85,
-        "sell": 0.7
+        "sell": 0.75
       },
       "B": {
-        "buy": 0.5,
-        "sell": 0.7
+        "buy": 0.45,
+        "sell": 0.6
       },
       "C": {
         "buy": 0.4,
@@ -23,11 +23,11 @@
     {
       "A": {
         "buy": 0.85,
-        "sell": 0.85
+        "sell": 0.95
       },
       "B": {
         "buy": 0.35,
-        "sell": 0.4
+        "sell": 0.45
       },
       "C": {
         "buy": 0.4,
@@ -88,34 +88,34 @@
     "C": 0.0
   },
   "reasons": {
-    "A": "cours pr\u00e9vu 5.046 entre 4.870 et 5.194",
-    "B": "cours pr\u00e9vu 13.005 >= seuil de vente 12.187",
-    "C": "cours pr\u00e9vu 1.034 entre 0.921 et 1.093"
+    "A": "cours pr\u00e9vu 5.140 entre 4.871 et 5.159",
+    "B": "cours pr\u00e9vu 13.008 >= seuil de vente 12.307",
+    "C": "cours pr\u00e9vu 0.968 entre 0.916 et 1.087"
   },
-  "expected_value": 84768.91,
-  "expected_value_fixed_thresholds": 82506.7,
+  "expected_value": 84940.39,
+  "expected_value_fixed_thresholds": 82520.89,
   "models": {
     "A": {
       "period": 48.0,
-      "level": 5.025050867983311,
-      "drift": -0.00012233532965549577,
-      "amplitude": 0.14455246387401458,
-      "phase": -0.03672365676589338
+      "level": 5.024478231641499,
+      "drift": -0.00011790744076095331,
+      "amplitude": 0.14456873433483217,
+      "phase": -0.0359640867647934
     },
     "B": {
       "period": 96.0,
-      "level": 7.987047178050834,
-      "drift": 0.009995637246430406,
-      "amplitude": 0.09891161885592631,
-      "phase": 1.46105365040064
+      "level": 7.9900954298986075,
+      "drift": 0.009972861339040451,
+      "amplitude": 0.09869316227266342,
+      "phase": 1.4616617188582064
     },
     "C": {
       "period": 24.0,
-      "level": 3.001413939033918,
-      "drift": -0.005021585758957184,
-      "amplitude": 0.23002364261451635,
-      "phase": 3.018937371691245
+      "level": 3.0014497947385883,
+      "drift": -0.0050218773557158414,
+      "amplitude": 0.23003409516438594,
+      "phase": 3.0190962661991403
     }
   },
-  "compute_seconds": 0.9
+  "compute_seconds": 0.7
 }
