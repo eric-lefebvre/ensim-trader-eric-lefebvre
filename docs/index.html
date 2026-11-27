@@ -100,6 +100,11 @@ th { color: var(--text-secondary); font-weight: 500; }
 @media (max-width: 700px) { .decision { grid-template-columns: 1fr; } }
 .dec { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 16px; }
 .dec .p { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0 0 16px; }
+@media (max-width: 700px) { .kpis { grid-template-columns: 1fr; } }
+.kpi .l { font-size: 13px; color: var(--text-secondary); }
+.kpi .n { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; margin: 4px 0; }
+.kpi .d { font-size: 12px; color: var(--text-muted); }
 .dec .v { font-size: 40px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
 .dec .a { font-size: 13px; color: var(--text-secondary); }
 .section-title { font-size: 18px; margin: 24px 0 8px; }
@@ -114,7 +119,11 @@ th { color: var(--text-secondary); font-weight: 500; }
 <body>
 <main>
   <h1>ENSIM Trade Center — Décision</h1>
-  <p class="sub"><span id="stamp" class="muted"></span></p>
+  <div class="kpis">
+    <div class="card kpi" style="margin:0"><div class="l">Depuis le dernier tick</div><div class="n" id="k-since">…</div><div class="d" id="k-since-d"></div></div>
+    <div class="card kpi" style="margin:0"><div class="l">Avant le prochain tick (estimé)</div><div class="n" id="k-next">…</div><div class="d" id="k-next-d"></div></div>
+    <div class="card kpi" style="margin:0"><div class="l">Décision publiée il y a</div><div class="n" id="k-dec">…</div><div class="d" id="k-dec-d"></div></div>
+  </div>
   <div class="controls" style="margin-top:0">
     <button id="reload">Rafraîchir les données</button>
     <span id="err"></span>
@@ -710,10 +719,6 @@ async function load() {
     ]);
     strategy = await fetch(STRATEGY_URL + bust).then(r => r.json()).catch(() => null);
     const H = market.history;
-    const date = d => (d ? new Date(d).toLocaleString("fr-FR") : "inconnue");
-    document.getElementById("stamp").innerHTML =
-      `Dernière mise à jour de la décision : <b>${date(published?.updated_at)}</b> · Dernière mise à jour du marché : <b>${date(market.generated_at)}</b><br>`
-      + `Dernier tick : <b>n° ${H.at(-1).t}</b> le <b>${date(H.at(-1).timestamp)}</b> · Prochain tick estimé : <b id="next-tick"></b>`;
     renderNextTick();
     models = {};
     for (const p of market.products) models[p] = fitModel(H.map(r => r[p]));
@@ -736,18 +741,25 @@ async function load() {
     document.getElementById("err").textContent = "Impossible de charger les données : " + e;
   }
 }
-// Temps estimé avant le prochain tick : dernier tick + écart médian des 30 derniers ticks
+// Chiffres de l'en-tête (mis à jour chaque minute) : temps depuis le dernier tick, temps estimé avant le
+// prochain (dernier tick + écart médian des 30 derniers ticks), âge de la décision publiée.
 function renderNextTick() {
-  const el = document.getElementById("next-tick");
-  if (!market || !el) return;
-  const H = market.history, gaps = [];
+  if (!market) return;
+  const H = market.history, gaps = [], now = Date.now();
   for (let i = Math.max(1, H.length - 30); i < H.length; i++) gaps.push(new Date(H[i].timestamp) - new Date(H[i - 1].timestamp));
   gaps.sort((a, b) => a - b);
-  const median = gaps[Math.floor(gaps.length / 2)], next = new Date(new Date(H.at(-1).timestamp).getTime() + median);
-  const left = next - Date.now(), hm = ms => { const m = Math.round(Math.abs(ms) / 60000); return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : `${m} min`; };
-  const at = next.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  el.textContent = left > 0 ? `dans ≈ ${hm(left)} (vers ${at})` : `imminent (attendu vers ${at}, retard de ${hm(left)})`;
-  el.title = `Écart médian entre les 30 derniers ticks : ${hm(median)}`;
+  const last = new Date(H.at(-1).timestamp), median = gaps[Math.floor(gaps.length / 2)], next = new Date(last.getTime() + median);
+  const hm = ms => { const m = Math.round(Math.abs(ms) / 60000); return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : `${m} min`; };
+  const day = d => d.toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const set = (id, v) => { document.getElementById(id).innerHTML = v; };
+  set("k-since", hm(now - last));
+  set("k-since-d", `tick n° ${H.at(-1).t} · ${day(last)}`);
+  const left = next - now;
+  set("k-next", left > 0 ? `≈ ${hm(left)}` : `<span class="down">en retard</span>`);
+  set("k-next-d", (left > 0 ? `vers ${day(next)}` : `attendu vers ${day(next)}, retard de ${hm(left)}`) + ` · écart habituel ${hm(median)}`);
+  const pub = published?.updated_at ? new Date(published.updated_at) : null;
+  set("k-dec", pub ? hm(now - pub) : "—");
+  set("k-dec-d", pub ? `le ${day(pub)}` + (pub < last ? ` · <span class="down">avant le dernier tick</span>` : "") : "decision.json non lisible");
 }
 setInterval(renderNextTick, 60000);
 const renderAll = () => { if (!market) return; renderDecision(); renderMarket(); renderSim(); };
