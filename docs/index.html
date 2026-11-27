@@ -143,7 +143,6 @@ th { color: var(--text-secondary); font-weight: 500; }
   <section class="card">
     <h2>Décision actuelle (prochain tick)</h2>
     <div class="decision" id="decision"><span class="muted">Calcul en cours…</span></div>
-    <p class="muted" id="dec-note" style="margin:0 0 12px"></p>
     <div class="table-wrap"><table id="justif"></table></div>
   </section>
 
@@ -180,6 +179,14 @@ th { color: var(--text-secondary); font-weight: 500; }
     <div class="chart-box tall"><canvas id="c-main"></canvas></div>
   </section>
 
+  <!-- 3. Valeur du portefeuille -->
+  <h2 class="section-title">Valeur du portefeuille</h2>
+  <section class="card">
+    <p class="muted" id="pf-sum" style="margin:0 0 4px"></p>
+    <div class="legend" id="lg-pf"></div>
+    <div class="chart-box tall"><canvas id="c-pf"></canvas></div>
+  </section>
+
   </div>
 
   <!-- Onglet Simulations -->
@@ -209,9 +216,11 @@ const MARKET_URL = "https://raw.githubusercontent.com/exofri/ensim-trade-center/
 const HOLDINGS_URL = "https://raw.githubusercontent.com/exofri/ensim-trade-center/refs/heads/main/traders/eric-lefebvre/holdings.json";
 const DECISION_URL = "https://raw.githubusercontent.com/eric-lefebvre/ensim-trader-eric-lefebvre/main/decision.json";
 // Seuils par bloc calculés par le workflow (scripts/algorithm.py) au dernier tick
+// Log des décisions appliquées à chaque tick (mis à jour par le workflow)
+const LOG_URL = "https://raw.githubusercontent.com/eric-lefebvre/ensim-trader-eric-lefebvre/main/docs/data/decision_log.json";
 const STRATEGY_URL = "https://raw.githubusercontent.com/eric-lefebvre/ensim-trader-eric-lefebvre/main/docs/data/strategy.json";
 
-let market = null, holdings = null, published = null, strategy = null, models = {};
+let market = null, holdings = null, published = null, strategy = null, decisionLog = null, models = {};
 const charts = {};
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmt = (x, d = 2) => Number(x).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -592,13 +601,6 @@ function renderDecision() {
         <span class="k">Achat si ≤</span><span class="x up">${fmt(z.buyAt, 3)} <span class="now">(${Math.round(z.b * 100)} %)</span></span>
       </div></div>`;
   }).join("");
-  // Valeur attendue avec ces seuils (durée du slider) vs ne rien faire
-  const T = +document.getElementById("sim-hor").value, units0 = startUnits(ps);
-  const withRule = simulateJoint(ps, currentPlan(ps), lastT, startMoney(), units0, T, false).value;
-  const nothing = startMoney() + ps.reduce((a, p) => a + units0[p] * models[p].f(lastT + T), 0);
-  const now = startMoney() + ps.reduce((a, p) => a + units0[p] * H[lastT][p], 0);
-  document.getElementById("dec-note").innerHTML =
-    `Valeur actuelle du portefeuille : <b>${fmt(now, 0)}</b> (argent ${fmt(startMoney(), 0)}) · avec ces seuils, valeur prévue dans ${T} ticks : <b class="up">${fmt(withRule, 0)}</b> · sans rien faire : ${fmt(nothing, 0)}.`;
   document.getElementById("justif").innerHTML =
     `<tr><th>Produit</th><th>Décision</th><th>Cours actuel</th><th>Seuils achat / vente</th><th>Position dans le cycle</th><th>Prochain retournement</th><th>Stock</th></tr>`
     + rows.join("");
@@ -648,6 +650,46 @@ function renderMarket() {
   mkChart("c-main", ds, o);
 }
 
+/* ---------- Valeur du portefeuille : historique + prévision sur la prochaine tranche ---------- */
+// Historique : on rejoue les décisions du log tick par tick avec les règles du marché (achat limité par
+// l'argent, vente par le stock), en partant de 1000 d'argent et 1000 unités de chaque produit (début du jeu ;
+// avant le log, aucune décision n'était publiée). Valeur = argent + stocks × prix du tick.
+// Prévision : simulation de la prochaine tranche (96 ticks) avec les seuils de la tranche 1, depuis les holdings réels.
+function renderPortfolio() {
+  if (!thresholdsReady()) return;
+  const H = market.history, lastT = H.length - 1, ps = productsOk(), t0 = H[0].t, X = i => t0 + i;
+  const byTick = new Map((decisionLog?.ticks || []).map(e => [e.tick, e.decision]));
+  let money = 1000; const units = Object.fromEntries(ps.map(p => [p, 1000]));
+  const past = [];
+  for (let i = 0; i <= lastT; i++) {
+    const row = H[i], d = byTick.get(row.t);
+    if (d) for (const p of ps) {
+      const x = +d[p] || 0, pr = row[p];
+      if (x > 0) { const q = Math.min(100 * x, money / pr); money -= q * pr; units[p] += q; }
+      else if (x < 0) { const q = Math.min(-100 * x, units[p]); money += q * pr; units[p] -= q; }
+    }
+    past.push({ x: X(i), y: money + ps.reduce((a, p) => a + units[p] * row[p], 0) });
+  }
+  // contrôle : le rejeu doit retomber sur les holdings réels
+  const real = startMoney() + ps.reduce((a, p) => a + startUnits(ps)[p] * H[lastT][p], 0);
+  const ok = Math.abs(real - past.at(-1).y) < 1;
+  if (!ok) past.push({ x: X(lastT), y: real });
+  const L = BLOCK_TICKS, plan = currentPlan(ps), first = Array.isArray(plan) ? [plan[0]] : [plan];
+  first.L = L;
+  const fut = simulateJoint(ps, first, lastT, startMoney(), startUnits(ps), L).total.map(d => ({ x: X(lastT) + d.x, y: d.y }));
+  fut[0].y = real;
+  const end = fut.at(-1).y, pct = (end - real) / real * 100;
+  document.getElementById("pf-sum").innerHTML =
+    `Valeur actuelle <b>${fmt(real, 0)}</b> (argent ${fmt(startMoney(), 0)}) → prévue dans ${L} ticks (≈ ${ticksToDuration(L)}) : <b class="${end >= real ? "up" : "down"}">${fmt(end, 0)} (${pct >= 0 ? "+" : ""}${fmt(pct, 1)} %)</b>`
+    + (ok ? "" : ` · <span class="muted">historique reconstitué incomplet (log des décisions indisponible ou en retard)</span>`);
+  document.getElementById("lg-pf").innerHTML = `<span><i class="ln"></i>valeur réelle (argent + stocks × prix)</span><span><i class="ln dash"></i>prévision sur la prochaine tranche (zone grisée)</span>`;
+  const o = baseOptions("valeur");
+  o.scales.x.max = X(lastT) + L;
+  o.plugins.nowLine = { show: true, x: X(lastT), color: css("--text-secondary"), shade: css("--shade"), label: `maintenant (tick ${X(lastT)})` };
+  o.plugins.tooltip.callbacks.label = i => i.dataset.label + " : " + fmt(i.parsed.y, 0);
+  mkChart("c-pf", [line("Valeur réelle", past, css("--series-total")), line("Valeur prévue", fut, css("--series-total"), { borderDash: [5, 4] })], o);
+}
+
 /* ---------- 3. Simulations ---------- */
 function buildSimCards() {
   const box = document.getElementById("sim-charts");
@@ -662,7 +704,7 @@ function buildSimCards() {
       <div class="legend" id="sim-lg-${p}"></div>
       <div class="chart-box tall"><canvas id="c-sim-${p}"></canvas></div>
     </section>`);
-  box.addEventListener("input", () => { renderDecision(); renderMarket(); renderSim(); });
+  box.addEventListener("input", () => { renderDecision(); renderMarket(); renderPortfolio(); renderSim(); });
 }
 function renderSim() {
   if (!thresholdsReady() || document.getElementById("tab-sim").hidden) return;
@@ -749,7 +791,7 @@ function applyPlan(plan, sourceTxt) {
     + ps.map(p => models[p].trend(market.history.length - 1 + k * L + 1) <= 0
         ? `<td class="nowrap muted">— (au plancher)</td>`
         : `<td class="nowrap">${Math.round(th[p].b * 100)} / ${Math.round(th[p].s * 100)} %</td>`).join("") + `</tr>`).join("") + `</table>`;
-  renderDecision(); renderMarket(); renderSim();
+  renderDecision(); renderMarket(); renderPortfolio(); renderSim();
 }
 
 /* ---------- Chargement ---------- */
@@ -763,6 +805,7 @@ async function load() {
       fetch(DECISION_URL + bust).then(r => r.json()).catch(() => null),
     ]);
     strategy = await fetch(STRATEGY_URL + bust).then(r => r.json()).catch(() => null);
+    decisionLog = await fetch(LOG_URL + bust).then(r => r.json()).catch(() => null);
     const H = market.history;
     renderNextTick();
     models = {};
@@ -818,12 +861,12 @@ function renderNextTick() {
   set("k-dec-d", pub ? `le ${day(pub)}` + (pub < last ? ` · <span class="down">avant le dernier tick</span>` : "") : "decision.json non lisible");
 }
 setInterval(renderNextTick, 60000);
-const renderAll = () => { if (!market) return; renderDecision(); renderMarket(); renderSim(); };
+const renderAll = () => { if (!market) return; renderDecision(); renderMarket(); renderPortfolio(); renderSim(); };
 for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => {
   for (const x of document.querySelectorAll(".tabs button")) x.setAttribute("aria-selected", x === b ? "true" : "false");
   document.getElementById("tab-main").hidden = b.dataset.tab !== "main";
   document.getElementById("tab-sim").hidden = b.dataset.tab !== "sim";
-  if (market) b.dataset.tab === "sim" ? renderSim() : renderMarket();
+  if (market) b.dataset.tab === "sim" ? renderSim() : (renderMarket(), renderPortfolio());
 });
 document.getElementById("win").addEventListener("change", () => market && renderMarket());
 document.getElementById("hor").addEventListener("change", () => market && renderMarket());
