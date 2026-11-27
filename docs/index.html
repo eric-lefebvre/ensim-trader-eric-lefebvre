@@ -136,6 +136,7 @@ th { color: var(--text-secondary); font-weight: 500; }
 .alert { border-radius: 10px; padding: 14px 18px; font-size: 16px; line-height: 1.4; border: 2px solid; }
 .alert b { font-size: 18px; }
 .alert.forte { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 18%, var(--surface-1)); }
+.alert.prudent { border-color: #c98500; background: color-mix(in srgb, #c98500 15%, var(--surface-1)); }
 .alert.info { border-color: #2a78d6; background: color-mix(in srgb, #2a78d6 15%, var(--surface-1)); }
 .nowrap { white-space: nowrap; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 16px; }
@@ -290,10 +291,13 @@ function fitFixedPeriod(y, P, wt) {
 // P est trouvé par balayage ; niveau, dérive, k et φ par moindres carrés alternés.
 // Les événements récents comptent plus : poids d'un tick divisé par 2 tous les HALF_LIFE ticks dans le passé
 // (halfLife = null : tous les ticks pareils). Même calcul que Model dans scripts/algorithm.py.
-const HALF_LIFE = 72;  // événements récents plus importants (≈ 20 jours), comme HALF_LIFE dans scripts/algorithm.py
+const HALF_LIFE = 96;  // événements récents plus importants (≈ 1 cycle de B), comme HALF_LIFE dans scripts/algorithm.py
 // Alerte (comme ALERT_HALF_LIFE / ALERT_THRESHOLD dans scripts/algorithm.py) : moyenne pondérée des écarts au modèle
 // sur tout l'historique, les récents pesant beaucoup plus ; seuil calibré pour que le pire tick passé soit à 0,8.
-const ALERT_HALF_LIFE = 8, ALERT_THRESHOLD = 0.67;
+const ALERT_HALF_LIFE = 8, ALERT_THRESHOLD = 0.79;
+// Mode prudent (comme PRUDENT_* en Python) : >= 8 des 10 derniers ticks sous la prévision et écart moyen >= 1 bruit
+// -> baisse réelle : prévision abaissée du niveau de la baisse, achats coupés, zone de vente avancée de 25 points.
+const PRUDENT_TICKS = 10, PRUDENT_MIN_SAME = 8, PRUDENT_Z = 1.0, PRUDENT_SELL_BONUS = 0.25;
 function fitModel(y, halfLife = HALF_LIFE) {
   const n = y.length;
   if (n < 12) return null;
@@ -337,7 +341,14 @@ function fitModel(y, halfLife = HALF_LIFE) {
   for (let t = 0; t < n; t++) { const q = Math.pow(0.5, (n - 1 - t) / ALERT_HALF_LIFE); aw += q; ar += q * rel[t]; }
   m.alertScore = ar / aw / m.noise;            // en bruits habituels
   m.alertLevel = m.alertScore / ALERT_THRESHOLD; // distance au déclenchement (±1)
-  m.fa = t => m.f(t); // prévision = courbe du modèle (ne part pas du dernier cours observé), comme Model.fa en Python
+  // Baisse réelle ou bruit ? Écarts des 10 derniers ticks à la prévision (comme Model en Python)
+  const lastRel = rel.slice(-PRUDENT_TICKS), meanRel = lastRel.reduce((a2, v) => a2 + v, 0) / lastRel.length;
+  m.persistZ = meanRel / m.noise;
+  m.persistBelow = lastRel.filter(v => v < 0).length;
+  m.prudent = m.persistBelow >= PRUDENT_MIN_SAME && m.persistZ <= -PRUDENT_Z;
+  m.shift = m.prudent ? meanRel : 0;
+  // prévision = courbe du modèle, sans partir du dernier cours ; en mode prudent, abaissée du niveau de la baisse
+  m.fa = t => Math.max(m.f(t) * (1 + m.shift), 0.01);
   return m;
 }
 // Alerte par produit (mêmes règles que detect_alerts dans scripts/algorithm.py), quand |score| >= ALERT_THRESHOLD :
@@ -354,6 +365,9 @@ function detectAlerts() {
     else if (m.alertLevel >= 1)
       list.push({ level: "info", kind: "pic", blockBuy: false,
         message: `Pic sur ${p} : le cours est nettement au-dessus de son modèle (score +${fmt(m.alertScore, 2)} bruit, seuil +${fmt(ALERT_THRESHOLD, 2)}). Information seulement : la stratégie continue normalement, aucun achat n'est déclenché par l'alerte.` });
+    if (m.prudent)
+      list.push({ level: "prudent", kind: "prudent", blockBuy: true,
+        message: `Mode prudent sur ${p} : ${m.persistBelow}/${PRUDENT_TICKS} derniers ticks sous la prévision, écart moyen ${m.shift >= 0 ? "+" : ""}${fmt(m.shift * 100, 1)} % (${fmt(m.persistZ, 1)} bruit) : ce n'est plus du bruit mais une baisse réelle. Prévision abaissée d'autant, achats de ${p} coupés, zone de vente avancée de ${Math.round(PRUDENT_SELL_BONUS * 100)} points.` });
     out[p] = list;
   }
   return (alertCache = out);
@@ -637,11 +651,13 @@ function renderDecision() {
   const th = readThresholds(ps);
   let money = startMoney();
   const units = startUnits(ps), dec = {}, rows = [], gauges = [];
-  const alerts = detectAlerts(), blocked = new Set(ps.filter(p => alerts[p].some(a => a.blockBuy)));
+  const alerts = detectAlerts(), blocked = new Set(ps.filter(p => alerts[p].some(a => a.blockBuy) || models[p].prudent));
   const all = ps.flatMap(p => alerts[p]);
   document.getElementById("alerts").innerHTML = all.map(a =>
-    `<div class="alert ${a.level}"><b>${a.level === "forte" ? "⚠ ALERTE BAISSE" : "▲ PIC"}</b> — ${a.message}</div>`).join("");
+    `<div class="alert ${a.level}"><b>${a.level === "forte" ? "⚠ ALERTE BAISSE" : a.level === "prudent" ? "↘ MODE PRUDENT" : "▲ PIC"}</b> — ${a.message}</div>`).join("");
   for (const p of ps) { // même calcul que le 1er tick de la simulation (argent partagé, ordre A, B, C)
+    // mode prudent : zone de vente avancée (le seuil affiché dans le tableau et la jauge est celui réellement appliqué)
+    if (models[p].prudent) th[p] = { b: th[p].b, s: Math.min(1, th[p].s + PRUDENT_SELL_BONUS) };
     const m = models[p], pr = m.fa(lastT + 1), z = zones(m, lastT + 1, th[p]), moneyBefore = money;
     let q = 0, reason;
     if (z.tr > 0 && pr <= z.buyAt && blocked.has(p)) {

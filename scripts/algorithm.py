@@ -88,13 +88,17 @@ def fetch_feeds():
 
 
 # ---------------------------------------------------------------- modèle
-HALF_LIFE = 72    # poids d'un tick divisé par 2 tous les 72 ticks (≈ 20 jours) : les événements
+HALF_LIFE = 96    # poids d'un tick divisé par 2 tous les 96 ticks (≈ 1 cycle de B, ≈ 27 jours) : les événements
                   # récents comptent plus, mais la prévision reste la courbe du modèle (elle ne part pas du dernier point)
 # Alerte : moyenne des écarts au modèle sur TOUT l'historique, chaque tick pesant deux fois moins tous les
 # ALERT_HALF_LIFE ticks dans le passé (les événements récents comptent beaucoup plus), en « bruits habituels ».
 # Seuil calibré sur l'historique (calibrate_alert dans les commentaires du commit) : le pire tick passé est à 0,8.
 ALERT_HALF_LIFE = 8      # ≈ 2,2 jours
-ALERT_THRESHOLD = 0.67   # en bruits habituels : |score| >= 0,67 déclenche (calibré : pire tick passé à 0,80 au plus)
+ALERT_THRESHOLD = 0.79   # en bruits habituels : |score| >= 0,79 déclenche (calibré : pire tick passé à 0,80 au plus)
+# Mode prudent : si au moins 8 des 10 derniers ticks sont sous la prévision et que leur écart moyen dépasse 1 bruit,
+# ce n'est plus du bruit mais une baisse réelle (sur l'historique : ~2 % des ticks). Alors la prévision descend du
+# niveau de cette baisse, les achats du produit sont coupés et sa zone de vente commence 25 points plus tôt.
+PRUDENT_TICKS, PRUDENT_MIN_SAME, PRUDENT_Z, PRUDENT_SELL_BONUS = 10, 8, 1.0, 0.25
 
 class Model:
     def __init__(self, y, half_life=HALF_LIFE):
@@ -139,10 +143,17 @@ class Model:
         self.alert_score = float((wa * rel).sum() / wa.sum() / self.noise)       # en bruits habituels
         self.alert_level = self.alert_score / ALERT_THRESHOLD                     # distance au déclenchement (±1)
 
+        # Baisse réelle ou bruit ? Écarts des 10 derniers ticks à la prévision
+        last = rel[-PRUDENT_TICKS:]
+        self.persist_z = float(last.mean() / self.noise)
+        self.persist_below = int((last < 0).sum())
+        self.prudent = self.persist_below >= PRUDENT_MIN_SAME and self.persist_z <= -PRUDENT_Z
+        self.shift = float(last.mean()) if self.prudent else 0.0     # niveau de la baisse observée (ex. -1,6 %)
+
     def fa(self, t):
-        """Prévision utilisée pour décider : la courbe du modèle. Elle ne part pas du dernier cours observé : si celui-ci
-        est anormalement haut ou bas, la prévision corrige la trajectoire au lieu de le suivre."""
-        return self.f(t)
+        """Prévision utilisée pour décider : la courbe du modèle, sans partir du dernier cours observé (un point isolé
+        anormal ne la déplace pas). En mode prudent (baisse réelle sur plusieurs ticks), elle descend du niveau de la baisse."""
+        return np.maximum(self.f(t) * (1 + self.shift), 0.01)
 
     def trend(self, t):
         return np.maximum(self.a + self.b * np.asarray(t, dtype=float), 0)
@@ -295,10 +306,12 @@ def next_decision(models, ps, plan, last, money, units, blocked=()):
         pr, tr = float(m.fa(t)), float(m.trend(t))
         low, high = tr * (1 - m.k), tr * (1 + m.k)
         b, s = plan[0][p]
+        if m.prudent:   # mode prudent : la zone de vente commence plus tôt
+            s = min(1.0, s + PRUDENT_SELL_BONUS)
         buy_at, sell_at = low + b * (tr - low), high - s * (high - tr)
         q = 0.0
         if tr > 0 and pr <= buy_at and p in blocked:
-            reasons[p] = f"cours prévu {pr:.3f} <= seuil d'achat {buy_at:.3f}, mais alerte de baisse : achats coupés"
+            reasons[p] = f"cours prévu {pr:.3f} <= seuil d'achat {buy_at:.3f}, mais alerte de baisse ou mode prudent : achats coupés"
         elif tr > 0 and pr <= buy_at:
             q = min(LOT, max(0.0, (money - MIN_MONEY_RESERVE) / pr))
             money -= q * pr
@@ -336,6 +349,11 @@ def detect_alerts(models, history, products):
             out.append({"level": "info", "kind": "pic", "block_buy": False,
                         "message": f"Pic sur {p} : le cours est nettement au-dessus de son modèle (score {m.alert_score:+.2f} bruit, seuil +{ALERT_THRESHOLD:.2f}). "
                                    f"Information seulement : la stratégie continue normalement, aucun achat n'est déclenché par l'alerte."})
+        if m.prudent:
+            out.append({"level": "prudent", "kind": "prudent", "block_buy": True,
+                        "message": f"Mode prudent sur {p} : {m.persist_below}/{PRUDENT_TICKS} derniers ticks sous la prévision, écart moyen "
+                                   f"{m.shift * 100:+.1f} % ({m.persist_z:+.1f} bruit) : ce n'est plus du bruit mais une baisse réelle. "
+                                   f"Prévision abaissée d'autant, achats de {p} coupés, zone de vente avancée de {PRUDENT_SELL_BONUS * 100:.0f} points."})
         alerts[p] = out
     return alerts
 
@@ -356,7 +374,7 @@ def build_strategy(history, holdings, products):
     pre = precompute(models, ps, last, L * nb)
     plan, value, fixed_value = optimize_blocks(ps, pre, money0, units0, L, nb)
     alerts = detect_alerts(models, history, ps)
-    blocked = {p for p, a in alerts.items() if any(x["block_buy"] for x in a)}
+    blocked = {p for p, a in alerts.items() if any(x["block_buy"] for x in a)} | {p for p in ps if models[p].prudent}
     dec, reasons = next_decision(models, ps, plan, last, money0, units0, blocked)
     return {"alerts": alerts, "models": models, "L": L, "nb": nb, "plan": plan, "value": value,
             "fixed_value": fixed_value, "signals": dec, "reasons": reasons}
@@ -485,7 +503,7 @@ def main():
         "alerts": st["alerts"],
         "expected_value": round(value, 2),
         "expected_value_fixed_thresholds": round(fixed_value, 2),
-        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi, "noise": m.noise, "alert_score": m.alert_score, "alert_level": m.alert_level, } for p, m in models.items()},
+        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi, "noise": m.noise, "alert_score": m.alert_score, "alert_level": m.alert_level, "prudent": m.prudent, "persist_z": m.persist_z, "persist_below": m.persist_below, "shift": m.shift} for p, m in models.items()},
         "compute_seconds": round(time.time() - started, 1),
     }
     os.makedirs(os.path.dirname(STRATEGY_FILE), exist_ok=True)
