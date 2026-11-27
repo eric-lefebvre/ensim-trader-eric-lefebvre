@@ -138,11 +138,13 @@ th { color: var(--text-secondary); font-weight: 500; }
 .cyc .nm { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .cyc .end { font-size: 13px; color: var(--text-secondary); text-align: center; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .cyc .end b { display: block; font-size: 16px; color: var(--text-primary); }
+.cyc .end.down, .cyc .end.down b { color: var(--bad); }   /* creux : rouge */
+.cyc .end.up, .cyc .end.up b { color: var(--good); }      /* sommets : vert */
 .cg { position: relative; height: 78px; }
 .cg .bar { position: absolute; left: 0; right: 0; top: 30px; height: 14px; border-radius: 7px; background: var(--grid); }
 .cg .zb, .cg .zs { position: absolute; top: 30px; height: 14px; }
-.cg .zb { left: 0; border-radius: 7px 0 0 7px; background: color-mix(in srgb, var(--good) 35%, transparent); }
-.cg .zs { right: 0; border-radius: 0 7px 7px 0; background: color-mix(in srgb, var(--bad) 35%, transparent); }
+.cg .zb { left: 0; border-radius: 7px 0 0 7px; background: color-mix(in srgb, var(--bad) 35%, transparent); }   /* côté creux : rouge */
+.cg .zs { right: 0; border-radius: 0 7px 7px 0; background: color-mix(in srgb, var(--good) 35%, transparent); } /* côté sommets : vert */
 .cg .tk { position: absolute; top: 26px; width: 2px; height: 22px; margin-left: -1px; }
 .ag { position: relative; display: inline-block; width: 110px; height: 10px; border-radius: 5px; background: var(--grid); vertical-align: middle; margin-right: 8px; }
 .ag i { position: absolute; top: 0; height: 10px; border-radius: 5px; }
@@ -225,7 +227,7 @@ tr.base td { color: var(--text-muted); font-style: italic; }
   <section class="card">
     <div class="table-wrap"><table id="justif"></table></div>
     <div id="cycles"></div>
-    <p class="muted" style="margin:4px 0 0">Jauge : de la ligne des creux (gauche) à la ligne des sommets (droite) au prochain tick · zone verte = achat, zone rouge = vente · ● cours prévu au prochain tick · • cours actuel · la flèche indique le sens du cycle.</p>
+    <p class="muted" style="margin:4px 0 0">Jauge : de la ligne des creux (gauche) à la ligne des sommets (droite) au prochain tick · creux et zone d'achat en rouge, sommets et zone de vente en vert · ● cours prévu au prochain tick · • cours actuel · la flèche indique le sens du cycle.</p>
   </section>
 
   <!-- Répartition du portefeuille -->
@@ -796,19 +798,19 @@ function renderDecision() {
     const sellAnchor = pS > 82 ? "transform:translateX(-100%);padding-right:4px" : "transform:none;padding-left:4px";
     gauges.push(`<div class="cyc">
       <div class="nm"><span class="swatch" style="background:${col(p)}"></span>${p}</div>
-      <div class="end">creux<b>${fmt(low, 3)}</b></div>
+      <div class="end down">creux<b class="down">${fmt(low, 3)}</b></div>
       <div class="cg">
         <div class="bar"></div>
         <div class="zb" style="width:${L(pB)}"></div><div class="zs" style="width:${L(100 - pS)}"></div>
-        <div class="tk" style="left:${L(pB)};background:var(--good)"></div><div class="tl up" style="left:${L(pB)};${buyAnchor}">achat ≤ ${fmt(z.buyAt, 3)} (${Math.round(th[p].b * 100)} %)</div>
-        <div class="tk" style="left:${L(pS)};background:var(--bad)"></div><div class="tl down" style="left:${L(pS)};${sellAnchor}">vente ≥ ${fmt(z.sellAt, 3)} (${Math.round(th[p].s * 100)} %)</div>
+        <div class="tk" style="left:${L(pB)};background:var(--bad)"></div><div class="tl down" style="left:${L(pB)};${buyAnchor}">achat ≤ ${fmt(z.buyAt, 3)} (${Math.round(th[p].b * 100)} %)</div>
+        <div class="tk" style="left:${L(pS)};background:var(--good)"></div><div class="tl up" style="left:${L(pS)};${sellAnchor}">vente ≥ ${fmt(z.sellAt, 3)} (${Math.round(th[p].s * 100)} %)</div>
         <div class="arrow" style="left:${L(Math.min(pFrom, pPr))};width:${L(Math.abs(pPr - pFrom))}"></div>
         <div class="mk now" style="left:${L(pNow)}" title="cours actuel"></div>
         <div class="mk" style="left:${L(pPr)}" title="cours prévu au prochain tick"></div>
         <div class="head" style="left:calc(${L(pPr)} ${right ? "-" : "+"} 13px)">${right ? "▶" : "◀"}</div>
         <div class="pl" style="left:${L(pPr)};${anchor(pPr)}">actuel ${fmt(H[lastT][p], 3)} → <b>prévu ${fmt(pr, 3)}</b></div>
       </div>
-      <div class="end">sommet<b>${fmt(high, 3)}</b></div>
+      <div class="end up">sommet<b class="up">${fmt(high, 3)}</b></div>
     </div>`);
   }
   lastDecision = { ...dec };
@@ -847,8 +849,8 @@ function renderMarket() {
         const z = zones(m, t, thAt(Math.max(1, t - lastT))[p]);
         buy.push({ x: X(t), y: z.buyAt }); sell.push({ x: X(t), y: z.sellAt });
       }
-      ds.push(line(p + " seuil d'achat", buy, css("--good"), { borderDash: [6, 4], borderWidth: 1.5 }),
-        line(p + " seuil de vente", sell, css("--bad"), { borderDash: [6, 4], borderWidth: 1.5 }));
+      ds.push(line(p + " seuil d'achat", buy, css("--bad"), { borderDash: [6, 4], borderWidth: 1.5 }),   // près des creux : rouge
+        line(p + " seuil de vente", sell, css("--good"), { borderDash: [6, 4], borderWidth: 1.5 }));       // près des sommets : vert
     }
     if (sel !== "ABC" && m) { // un seul produit : bande d'incertitude
       const hi = [], lo = [];
@@ -860,8 +862,8 @@ function renderMarket() {
   document.getElementById("lg-main").innerHTML = ps.map(p => `<span><span class="swatch" style="background:${col(p)}"></span>${p}</span>`).join("")
     + `<span><i class="ln"></i>observé</span><span><i class="ln dash"></i>prévu (zone grisée)</span>`
     + `<span><i class="ln dot"></i>tendance</span>`
-    + `<span style="color:${css("--good")}"><i class="ln dash"></i></span>seuil d'achat`
-    + `<span style="color:${css("--bad")}"><i class="ln dash"></i></span>seuil de vente`;
+    + `<span style="color:${css("--bad")}"><i class="ln dash"></i></span>seuil d'achat (côté creux)`
+    + `<span style="color:${css("--good")}"><i class="ln dash"></i></span>seuil de vente (côté sommets)`;
   const o = baseOptions("prix");
   o.scales.x.max = X(lastT + hor);
   o.plugins.nowLine = { show: true, x: X(lastT), color: css("--text-secondary"), shade: css("--shade"), label: `maintenant (tick ${X(lastT)})` };
@@ -969,8 +971,8 @@ function renderSim() {
       `Stock initial ${fmt(units0[p], 0)} u → stock final ${fmt(r.units[p], 0)} u`;
     document.getElementById("sim-lg-" + p).innerHTML =
       `<span><span class="swatch" style="background:${col(p)}"></span>Cours de ${p} : observé (T &lt; 0) puis prévu (axe gauche)</span>`
-      + `<span style="color:${css("--good")}"><i class="ln dash"></i></span>Seuil d'achat (change à chaque bloc)`
-      + `<span style="color:${css("--bad")}"><i class="ln dash"></i></span>Seuil de vente (change à chaque bloc)`
+      + `<span style="color:${css("--bad")}"><i class="ln dash"></i></span>Seuil d'achat, côté creux (change à chaque bloc)`
+      + `<span style="color:${css("--good")}"><i class="ln dash"></i></span>Seuil de vente, côté sommets (change à chaque bloc)`
       + `<span style="color:${css("--text-muted")}"><i class="ln"></i></span>Stock de ${p} (axe droit)`;
     const o = baseOptions("cours");
     o.scales.x.title.text = "T (ticks, 0 = maintenant)"; o.scales.x.min = -back; o.scales.x.max = T;
@@ -982,8 +984,8 @@ function renderSim() {
     mkChart("c-sim-" + p, [
       line("Cours observé", obs, col(p)),
       line("Cours prévu", fut, col(p)),
-      line("Seuil d'achat", buy, css("--good"), dash),
-      line("Seuil de vente", sell, css("--bad"), dash),
+      line("Seuil d'achat", buy, css("--bad"), dash),
+      line("Seuil de vente", sell, css("--good"), dash),
       line("Stock", r.stock[p], css("--text-muted"), { yAxisID: "y1", borderWidth: 1.5 }),
     ], o);
   }
