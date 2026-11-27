@@ -88,7 +88,8 @@ def fetch_feeds():
 
 
 # ---------------------------------------------------------------- modèle
-HALF_LIFE = 192   # poids d'un tick divisé par 2 tous les 192 ticks dans le passé (2 cycles de B)
+HALF_LIFE = 96    # forme des cycles : poids d'un tick divisé par 2 tous les 96 ticks (≈ 1 cycle de B, ≈ 27 jours)
+RECENT_HALF_LIFE = 1   # écart récent au modèle : demi-vie de 1 tick (≈ 7 h), il domine la prévision du prochain tick
 
 class Model:
     def __init__(self, y, half_life=HALF_LIFE):
@@ -129,6 +130,19 @@ class Model:
         recent = rel[-192:]
         self.noise = float(1.4826 * np.median(np.abs(recent - np.median(recent)))) or 1e-9
         self.z = (rel[-3:] / self.noise).tolist()    # écarts des 3 derniers ticks, en nombre de « bruits habituels »
+        # Écart récent au modèle (dernier tick surtout) et sa mémoire d'un tick au suivant (≈ 0,5 : dans le marché,
+        # chaque prix garde la moitié du précédent). La prévision part de cet écart, qui s'estompe tick après tick.
+        wr = 0.5 ** ((n - 1 - t) / RECENT_HALF_LIFE)
+        self.last = n - 1
+        self.recent_dev = float((wr * rel).sum() / wr.sum())
+        kk = min(192, n - 1)
+        self.rho = max(0.0, float(np.corrcoef(rel[-kk - 1:-1], rel[-kk:])[0, 1])) if kk > 2 else 0.0
+
+    def fa(self, t):
+        """Prévision utilisée pour décider : modèle × (1 + écart récent × rho^h), h = ticks après le dernier."""
+        t = np.asarray(t, dtype=float)
+        h = np.maximum(t - self.last, 0)
+        return np.maximum(self.f(t) * (1 + self.recent_dev * self.rho ** h), 0.01)
 
     def trend(self, t):
         return np.maximum(self.a + self.b * np.asarray(t, dtype=float), 0)
@@ -156,7 +170,7 @@ def precompute(models, ps, t0, T):
     for p in ps:
         m = models[p]
         tr = m.trend(t0 + i)
-        pre[p] = {"pr": m.f(t0 + i), "tr": tr, "low": tr * (1 - m.k), "high": tr * (1 + m.k)}
+        pre[p] = {"pr": m.fa(t0 + i), "tr": tr, "low": tr * (1 - m.k), "high": tr * (1 + m.k)}
     return pre
 
 def simulate(ps, plan, L, pre, i0, money, units, T, vary=None):
@@ -278,7 +292,7 @@ def next_decision(models, ps, plan, last, money, units, blocked=()):
     for p in ps:
         m = models[p]
         t = last + 1
-        pr, tr = float(m.f(t)), float(m.trend(t))
+        pr, tr = float(m.fa(t)), float(m.trend(t))
         low, high = tr * (1 - m.k), tr * (1 + m.k)
         b, s = plan[0][p]
         buy_at, sell_at = low + b * (tr - low), high - s * (high - tr)
@@ -490,7 +504,7 @@ def main():
         "alerts": st["alerts"],
         "expected_value": round(value, 2),
         "expected_value_fixed_thresholds": round(fixed_value, 2),
-        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi, "noise": m.noise, "z": m.z} for p, m in models.items()},
+        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi, "noise": m.noise, "z": m.z, "recent_dev": m.recent_dev, "rho": m.rho} for p, m in models.items()},
         "compute_seconds": round(time.time() - started, 1),
     }
     os.makedirs(os.path.dirname(STRATEGY_FILE), exist_ok=True)

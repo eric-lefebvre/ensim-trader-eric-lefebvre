@@ -282,7 +282,8 @@ function fitFixedPeriod(y, P, wt) {
 // P est trouvé par balayage ; niveau, dérive, k et φ par moindres carrés alternés.
 // Les événements récents comptent plus : poids d'un tick divisé par 2 tous les HALF_LIFE ticks dans le passé
 // (halfLife = null : tous les ticks pareils). Même calcul que Model dans scripts/algorithm.py.
-const HALF_LIFE = 192;
+const HALF_LIFE = 96;       // forme des cycles (≈ 1 cycle de B), comme HALF_LIFE dans scripts/algorithm.py
+const RECENT_HALF_LIFE = 1;  // écart récent au modèle (≈ 7 h), comme RECENT_HALF_LIFE
 function fitModel(y, halfLife = HALF_LIFE) {
   const n = y.length;
   if (n < 12) return null;
@@ -323,6 +324,17 @@ function fitModel(y, halfLife = HALF_LIFE) {
   const md = med(recent);
   m.noise = 1.4826 * med(recent.map(v => Math.abs(v - md))) || 1e-9;
   m.z = rel.slice(-3).map(v => v / m.noise); // écarts des 3 derniers ticks, en nombre de « bruits habituels »
+  // Écart récent au modèle (dernier tick surtout) et sa mémoire d'un tick au suivant (≈ 0,5 dans le marché) :
+  // la prévision part de cet écart, qui s'estompe tick après tick (même calcul que Model.fa en Python).
+  let sw = 0, sr = 0;
+  for (let t = 0; t < n; t++) { const q = Math.pow(0.5, (n - 1 - t) / RECENT_HALF_LIFE); sw += q; sr += q * rel[t]; }
+  m.recentDev = sr / sw;
+  const kk = Math.min(192, n - 1), xs = rel.slice(-kk - 1, -1), ys = rel.slice(-kk);
+  const mx = xs.reduce((a2, v) => a2 + v, 0) / kk, my = ys.reduce((a2, v) => a2 + v, 0) / kk;
+  let cxy = 0, cxx = 0, cyy = 0;
+  for (let i = 0; i < kk; i++) { cxy += (xs[i] - mx) * (ys[i] - my); cxx += (xs[i] - mx) ** 2; cyy += (ys[i] - my) ** 2; }
+  m.rho = kk > 2 ? Math.max(0, cxy / Math.sqrt(cxx * cyy)) : 0;
+  m.fa = t => Math.max(m.f(t) * (1 + m.recentDev * Math.pow(m.rho, Math.max(t - (n - 1), 0))), 0.01);
   return m;
 }
 // Alertes par produit, même règles que detect_alerts dans scripts/algorithm.py (calibrées sur l'historique) :
@@ -385,7 +397,7 @@ function precompute(ps, t0, T) {
   const pre = {};
   for (const p of ps) {
     const m = models[p], o = { pr: new Float64Array(T + 1), tr: new Float64Array(T + 1), low: new Float64Array(T + 1), high: new Float64Array(T + 1) };
-    for (let i = 1; i <= T; i++) { const tr = m.trend(t0 + i); o.pr[i] = m.f(t0 + i); o.tr[i] = tr; o.low[i] = tr * (1 - m.k); o.high[i] = tr * (1 + m.k); }
+    for (let i = 1; i <= T; i++) { const tr = m.trend(t0 + i); o.pr[i] = m.fa(t0 + i); o.tr[i] = tr; o.low[i] = tr * (1 - m.k); o.high[i] = tr * (1 + m.k); }
     pre[p] = o;
   }
   return pre;
@@ -635,7 +647,7 @@ function renderDecision() {
   document.getElementById("alerts").innerHTML = all.map(a =>
     `<div class="alert ${a.level}"><b>${a.level === "forte" ? "⚠ ALERTE" : "Attention"}</b> — ${a.message}</div>`).join("");
   for (const p of ps) { // même calcul que le 1er tick de la simulation (argent partagé, ordre A, B, C)
-    const m = models[p], pr = m.f(lastT + 1), z = zones(m, lastT + 1, th[p]), moneyBefore = money;
+    const m = models[p], pr = m.fa(lastT + 1), z = zones(m, lastT + 1, th[p]), moneyBefore = money;
     let q = 0, reason;
     if (blocked.has(p)) {
       reason = `Garde-fou actif (cours trop loin du modèle) → aucun ordre.`;
@@ -663,8 +675,8 @@ function renderDecision() {
     </tr>`);
     // Grande jauge : de la ligne des creux (gauche) à la ligne des sommets (droite), au prochain tick
     const low = z.tr * (1 - m.k), high = z.tr * (1 + m.k), pct = v => Math.min(100, Math.max(0, (v - low) / (high - low) * 100));
-    // flèche : du modèle au tick actuel vers le prévu au prochain tick (sens du cycle) ; point gris = cours réel actuel
-    const pB = pct(z.buyAt), pS = pct(z.sellAt), pNow = pct(H[lastT][p]), pPr = pct(pr), pFrom = pct(m.f(lastT)), right = turn.rising;
+    // flèche : du cours actuel vers le cours prévu au prochain tick (la prévision part du dernier cours réel)
+    const pB = pct(z.buyAt), pS = pct(z.sellAt), pNow = pct(H[lastT][p]), pPr = pct(pr), pFrom = pNow, right = pPr >= pNow;
     const L = v => `${v.toFixed(2)}%`;
     const anchor = v => v > 80 ? "transform:translateX(-100%)" : v < 20 ? "transform:none" : ""; // texte vers l'intérieur près des bords
     gauges.push(`<div class="cyc">
@@ -706,7 +718,7 @@ function renderMarket() {
   for (const p of ps) {
     const m = models[p], c = col(p), obs = [], fut = [];
     for (let t = from; t < N; t++) obs.push({ x: X(t), y: H[t][p] });
-    if (m) for (let t = lastT; t <= lastT + hor; t++) fut.push({ x: X(t), y: m.f(t) });
+    if (m) for (let t = lastT; t <= lastT + hor; t++) fut.push({ x: X(t), y: t === lastT ? H[t][p] : m.fa(t) });
     ds.push(line(p + " observé", obs, c), line(p + " prévu", fut, c, { borderDash: [5, 4] }));
     if (m) { // droite de tendance de chaque courbe
       const trend = [];
@@ -724,7 +736,7 @@ function renderMarket() {
     }
     if (sel !== "ABC" && m) { // un seul produit : bande d'incertitude
       const hi = [], lo = [];
-      for (let t = lastT; t <= lastT + hor; t++) { hi.push({ x: X(t), y: m.f(t) + 2 * m.sigma }); lo.push({ x: X(t), y: m.f(t) - 2 * m.sigma }); }
+      for (let t = lastT; t <= lastT + hor; t++) { hi.push({ x: X(t), y: m.fa(t) + 2 * m.sigma }); lo.push({ x: X(t), y: m.fa(t) - 2 * m.sigma }); }
       ds.push(line("Borne haute", hi, "transparent", { _hideTip: true, pointHoverRadius: 0 }),
         line("Intervalle ±2σ", lo, "transparent", { fill: "-1", backgroundColor: hexA(c, 0.15), _hideTip: true, pointHoverRadius: 0 }));
     }
@@ -823,7 +835,7 @@ function renderSim() {
     const price = [], buy = [], sell = [];
     for (let i = -back; i <= T; i++) {
       const t = lastT + i, z = zones(m, t, thAt(i)[p]);
-      price.push({ x: i, y: i <= 0 ? H[t][p] : m.f(t) });
+      price.push({ x: i, y: i <= 0 ? H[t][p] : m.fa(t) });
       buy.push({ x: i, y: z.buyAt }); sell.push({ x: i, y: z.sellAt });
     }
     const obs = price.filter(d => d.x <= 0), fut = price.filter(d => d.x >= 0);
