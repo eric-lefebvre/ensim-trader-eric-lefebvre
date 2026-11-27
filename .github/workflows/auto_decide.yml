@@ -1,12 +1,12 @@
 name: Auto decide
 
 # Le marché de l'organisateur avance au plus une fois par heure (son cron "0 * * * *", souvent retardé)
-# et lit decision.json au début de chaque tick. On vérifie toutes les heures, 20 min après son cron,
+# et lit decision.json au début de chaque tick. On vérifie toutes les 3 heures (à la minute 20),
 # s'il y a un nouveau tick : si oui, scripts/algorithm.py recalcule les seuils et la décision ;
 # sinon il ne fait rien (pas de commit).
 "on":
   schedule:
-    - cron: "20 * * * *"
+    - cron: "20 */3 * * *"
   workflow_dispatch:
     inputs:
       force:
