@@ -88,12 +88,16 @@ def fetch_feeds():
 
 
 # ---------------------------------------------------------------- modèle
+HALF_LIFE = 192   # poids d'un tick divisé par 2 tous les 192 ticks dans le passé (2 cycles de B)
+
 class Model:
-    def __init__(self, y):
+    def __init__(self, y, half_life=HALF_LIFE):
         y = np.asarray(y, dtype=float)
         n = len(y)
         t = np.arange(n, dtype=float)
-        # 1) période : balayage de P (pas 0,25), modèle a + b t + c sin + d cos
+        # poids : les ticks récents comptent plus (None = tous les ticks pareils)
+        wt = np.ones(n) if half_life is None else 0.5 ** ((n - 1 - t) / half_life)
+        # 1) période : balayage de P (pas 0,25), modèle a + b t + c sin + d cos (moindres carrés pondérés)
         best = None
         max_p = min(300, n * 0.9)
         k = 0
@@ -101,8 +105,8 @@ class Model:
             P = 6 + 0.25 * k
             w = 2 * math.pi / P
             X = np.column_stack([np.ones(n), t, np.sin(w * t), np.cos(w * t)])
-            c = np.linalg.solve(X.T @ X, X.T @ y)
-            sse = float(((X @ c - y) ** 2).sum())
+            c = np.linalg.solve(X.T @ (X * wt[:, None]), X.T @ (wt * y))
+            sse = float((wt * (X @ c - y) ** 2).sum())
             if best is None or sse < best[0]:
                 best = (sse, P, w, c)
             k += 1
@@ -110,14 +114,21 @@ class Model:
         a, b = c[0], c[1]
         si, co = np.sin(w * t), np.cos(w * t)
         ks = kc = 0.0
-        # 2) moindres carrés alternés : oscillation relative, puis niveau et dérive
+        # 2) moindres carrés alternés (pondérés) : oscillation relative, puis niveau et dérive
         for _ in range(30):
             r = y / (a + b * t) - 1
-            ks, kc = np.linalg.solve([[si @ si, si @ co], [si @ co, co @ co]], [r @ si, r @ co])
+            ks, kc = np.linalg.solve([[wt @ (si * si), wt @ (si * co)], [wt @ (si * co), wt @ (co * co)]],
+                                     [wt @ (r * si), wt @ (r * co)])
             g = 1 + ks * si + kc * co
-            a, b = np.linalg.solve([[g @ g, (t * g) @ g], [(t * g) @ g, (t * t * g) @ g]], [y @ g, (y * t) @ g])
+            a, b = np.linalg.solve([[wt @ (g * g), wt @ (t * g * g)], [wt @ (t * g * g), wt @ (t * t * g * g)]],
+                                   [wt @ (y * g), wt @ (y * t * g)])
         self.a, self.b, self.P, self.w = float(a), float(b), float(P), float(w)
         self.k, self.phi = float(math.hypot(ks, kc)), float(math.atan2(kc, ks))
+        # bruit habituel : écart relatif prix / modèle, mesuré de façon robuste (MAD) sur les 192 derniers ticks
+        rel = y / self.f(t) - 1
+        recent = rel[-192:]
+        self.noise = float(1.4826 * np.median(np.abs(recent - np.median(recent)))) or 1e-9
+        self.z = (rel[-3:] / self.noise).tolist()    # écarts des 3 derniers ticks, en nombre de « bruits habituels »
 
     def trend(self, t):
         return np.maximum(self.a + self.b * np.asarray(t, dtype=float), 0)
@@ -259,8 +270,9 @@ def optimize_blocks(ps, pre, money0, units0, L, nb):
     return best_plan, float(best), fixed_value
 
 
-def next_decision(models, ps, plan, last, money, units):
-    """Décision du prochain tick (identique au 1er tick de la simulation et au dashboard)."""
+def next_decision(models, ps, plan, last, money, units, blocked=()):
+    """Décision du prochain tick (identique au 1er tick de la simulation et au dashboard).
+    blocked = produits sous garde-fou : aucun ordre (décision 0)."""
     dec, reasons = {}, {}
     units = dict(units)
     for p in ps:
@@ -271,7 +283,9 @@ def next_decision(models, ps, plan, last, money, units):
         b, s = plan[0][p]
         buy_at, sell_at = low + b * (tr - low), high - s * (high - tr)
         q = 0.0
-        if tr > 0 and pr <= buy_at:
+        if p in blocked:
+            reasons[p] = "garde-fou actif (cours trop loin du modèle) : aucun ordre"
+        elif tr > 0 and pr <= buy_at:
             q = min(LOT, max(0.0, (money - MIN_MONEY_RESERVE) / pr))
             money -= q * pr
             units[p] += q
@@ -285,6 +299,50 @@ def next_decision(models, ps, plan, last, money, units):
             reasons[p] = f"cours prévu {pr:.3f} entre {buy_at:.3f} et {sell_at:.3f}"
         dec[p] = math.floor(q + 0.5) / 100     # comme Math.round(q) / 100 dans le dashboard
     return dec, reasons
+
+
+# ---------------------------------------------------------------- alertes et garde-fou
+def detect_alerts(models, history, products):
+    """Alertes par produit (calibrées sur l'historique : aucune ne s'est déclenchée en temps normal).
+    - Cours hors de son état habituel : 2 derniers ticks à plus de 3 bruits du modèle, ou 3 derniers ticks à plus
+      de 2 bruits, toujours du même côté  -> alerte forte + garde-fou (plus aucun ordre automatique sur ce produit :
+      le modèle ne colle plus, ses prévisions ne sont fiables ni pour acheter ni pour vendre).
+      Un seul tick à plus de 3 bruits -> simple avertissement.
+    - Tendance qui change (ex. B qui s'aplatit) : tendance des 192 derniers ticks comparée à celle de tout
+      l'historique, en % par tranche de 96 ticks ; alerte forte si l'écart dépasse 40 % de la tendance (et 3 points)."""
+    alerts = {}
+    for p in products:
+        m = models.get(p)
+        if m is None:
+            continue
+        out = []
+        z = m.z
+        same_side = all(v > 0 for v in z) or all(v < 0 for v in z)
+        side = "au-dessus" if z[-1] > 0 else "en dessous"
+        if (len(z) >= 2 and abs(z[-1]) >= 3 and abs(z[-2]) >= 3 and z[-1] * z[-2] > 0) or (len(z) == 3 and all(abs(v) >= 2 for v in z) and same_side):
+            out.append({"level": "forte", "kind": "ecart", "block_buy": True,
+                        "message": f"{p} sort fortement de son état habituel : cours {side} du modèle depuis plusieurs ticks "
+                                   f"({', '.join(f'{v:+.1f}' for v in z)} × le bruit habituel de ±{m.noise * 100:.1f} %). "
+                                   f"Garde-fou : plus aucun achat ni vente automatique de {p} tant que le cours ne recolle pas au modèle -- à toi de décider."})
+        elif abs(z[-1]) >= 3:
+            out.append({"level": "attention", "kind": "ecart", "block_buy": False,
+                        "message": f"{p} : dernier cours {side} du modèle de {abs(z[-1]):.1f} × le bruit habituel (±{m.noise * 100:.1f} %). À surveiller."})
+        y = [row[p] for row in history]
+        if len(y) >= 2 * 192:
+            long_m, recent_m = Model(y, half_life=None), Model(y[-192:], half_life=None)
+            lvl_long = long_m.a + long_m.b * (len(y) - 1)
+            lvl_recent = recent_m.a + recent_m.b * 191
+            if lvl_long > 0 and lvl_recent > 0:
+                g_long = long_m.b / lvl_long * 100 * 96
+                g_recent = recent_m.b / lvl_recent * 100 * 96
+                if abs(g_recent - g_long) >= max(3.0, 0.4 * abs(g_long)):
+                    what = "s'aplatit" if abs(g_recent) < abs(g_long) and g_recent * g_long >= 0 else \
+                           "s'inverse" if g_recent * g_long < 0 else "s'accélère"
+                    out.append({"level": "forte", "kind": "tendance", "block_buy": False,
+                                "message": f"La tendance de {p} {what} : {g_recent:+.1f} % par tranche de 96 ticks sur les 192 derniers ticks, "
+                                           f"contre {g_long:+.1f} % sur tout l'historique."})
+        alerts[p] = out
+    return alerts
 
 
 # ---------------------------------------------------------------- signal (contrat du manuel)
@@ -302,8 +360,10 @@ def build_strategy(history, holdings, products):
     units0 = {p: float(holdings["products"][p]) for p in ps}
     pre = precompute(models, ps, last, L * nb)
     plan, value, fixed_value = optimize_blocks(ps, pre, money0, units0, L, nb)
-    dec, reasons = next_decision(models, ps, plan, last, money0, units0)
-    return {"models": models, "L": L, "nb": nb, "plan": plan, "value": value,
+    alerts = detect_alerts(models, history, ps)
+    blocked = {p for p, a in alerts.items() if any(x["block_buy"] for x in a)}
+    dec, reasons = next_decision(models, ps, plan, last, money0, units0, blocked)
+    return {"alerts": alerts, "models": models, "L": L, "nb": nb, "plan": plan, "value": value,
             "fixed_value": fixed_value, "signals": dec, "reasons": reasons}
 
 def compute_signal(prices, product, history, holdings, products):
@@ -427,9 +487,10 @@ def main():
         "signal_raw": dec,
         "decision": {p: decision[p] for p in products},
         "reasons": reasons,
+        "alerts": st["alerts"],
         "expected_value": round(value, 2),
         "expected_value_fixed_thresholds": round(fixed_value, 2),
-        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi} for p, m in models.items()},
+        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi, "noise": m.noise, "z": m.z} for p, m in models.items()},
         "compute_seconds": round(time.time() - started, 1),
     }
     os.makedirs(os.path.dirname(STRATEGY_FILE), exist_ok=True)
@@ -439,6 +500,9 @@ def main():
     print(f"Tick {tick} -> decision.json : {decision}")
     for p in ps:
         print(f"  {p}: signal {dec[p]:+.2f} -> après garde {decision[p]:+.3f}  ({reasons[p]})")
+    for p, lst in st["alerts"].items():   # visible dans les logs et en annotation dans l'onglet Actions
+        for a in lst:
+            print(f"::{'error' if a['level'] == 'forte' else 'warning'} title=Alerte {p}::{a['message']}")
     print(f"  seuils bloc 1 : " + ", ".join(f"{p} {plan[0][p][0]:.0%}/{plan[0][p][1]:.0%}" for p in ps))
     print(f"  valeur prévue sur {L * nb} ticks : {value:.0f} (seuils fixes : {fixed_value:.0f}) -- {strategy['compute_seconds']} s")
 

@@ -126,6 +126,11 @@ th { color: var(--text-secondary); font-weight: 500; }
 .cg .pl { position: absolute; top: 4px; font-size: 13px; white-space: nowrap; transform: translateX(-50%); font-variant-numeric: tabular-nums; }
 @media (max-width: 700px) { .cyc { grid-template-columns: 1fr; } }
 .section-title { font-size: 18px; margin: 24px 0 8px; }
+.alerts { margin: 0 0 16px; display: grid; gap: 10px; }
+.alert { border-radius: 10px; padding: 14px 18px; font-size: 16px; line-height: 1.4; border: 2px solid; }
+.alert b { font-size: 18px; }
+.alert.forte { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 18%, var(--surface-1)); }
+.alert.attention { border-color: #c98500; background: color-mix(in srgb, #c98500 15%, var(--surface-1)); }
 .nowrap { white-space: nowrap; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 16px; }
 .tabs button { border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0; background: transparent; padding: 8px 16px; color: var(--text-secondary); margin-bottom: -1px; }
@@ -142,6 +147,7 @@ th { color: var(--text-secondary); font-weight: 500; }
     <div class="card kpi" style="margin:0"><div class="l">Avant le prochain tick (estimé)</div><div class="n" id="k-next">…</div><div class="d" id="k-next-d"></div></div>
     <div class="card kpi" style="margin:0"><div class="l">Décision publiée il y a</div><div class="n" id="k-dec">…</div><div class="d" id="k-dec-d"></div></div>
   </div>
+  <div class="alerts" id="alerts"></div>
   <div class="controls" style="margin-top:0">
     <button id="reload">Rafraîchir les données</button>
     <span id="err"></span>
@@ -259,28 +265,32 @@ function solve(M, v) { // élimination de Gauss, petit système
   for (let i = n - 1; i >= 0; i--) { let s = A[i][n]; for (let j = i + 1; j < n; j++) s -= A[i][j] * x[j]; x[i] = s / A[i][i]; }
   return x;
 }
-function fitFixedPeriod(y, P) {
+function fitFixedPeriod(y, P, wt) {
   const w = 2 * Math.PI / P, n = y.length;
   const XtX = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]], Xty = [0,0,0,0];
   for (let t = 0; t < n; t++) {
-    const r = [1, t, Math.sin(w * t), Math.cos(w * t)];
-    for (let i = 0; i < 4; i++) { Xty[i] += r[i] * y[t]; for (let j = 0; j < 4; j++) XtX[i][j] += r[i] * r[j]; }
+    const r = [1, t, Math.sin(w * t), Math.cos(w * t)], q = wt[t];
+    for (let i = 0; i < 4; i++) { Xty[i] += q * r[i] * y[t]; for (let j = 0; j < 4; j++) XtX[i][j] += q * r[i] * r[j]; }
   }
   const c = solve(XtX, Xty);
   let sse = 0;
-  for (let t = 0; t < n; t++) { const e = y[t] - (c[0] + c[1]*t + c[2]*Math.sin(w*t) + c[3]*Math.cos(w*t)); sse += e * e; }
+  for (let t = 0; t < n; t++) { const e = y[t] - (c[0] + c[1]*t + c[2]*Math.sin(w*t) + c[3]*Math.cos(w*t)); sse += wt[t] * e * e; }
   return { c, sse, P, w };
 }
 // Forme de prix utilisée par le marché (scripts/market_tick.py de l'organisateur, paramètres secrets) :
 //   prix(t) = (niveau + dérive·t) × (1 + k·sin(2πt/P + φ)), plancher 0,01
 // P est trouvé par balayage ; niveau, dérive, k et φ par moindres carrés alternés.
-function fitModel(y) {
+// Les événements récents comptent plus : poids d'un tick divisé par 2 tous les HALF_LIFE ticks dans le passé
+// (halfLife = null : tous les ticks pareils). Même calcul que Model dans scripts/algorithm.py.
+const HALF_LIFE = 192;
+function fitModel(y, halfLife = HALF_LIFE) {
   const n = y.length;
   if (n < 12) return null;
+  const wt = Array.from({ length: n }, (_, t) => (halfLife == null ? 1 : Math.pow(0.5, (n - 1 - t) / halfLife)));
   let best = null;
   const maxP = Math.min(300, n * 0.9);
   for (let P = 6; P <= maxP; P += 0.25) {
-    const f = fitFixedPeriod(y, P);
+    const f = fitFixedPeriod(y, P, wt);
     if (!best || f.sse < best.sse) best = f;
   }
   const P = best.P, w = best.w;
@@ -288,14 +298,14 @@ function fitModel(y) {
   for (let it = 0; it < 30; it++) {
     let Sss = 0, Scc = 0, Ssc = 0, Srs = 0, Src = 0;
     for (let t = 0; t < n; t++) {
-      const L = a + b * t, r = y[t] / L - 1, si = Math.sin(w * t), co = Math.cos(w * t);
-      Sss += si * si; Scc += co * co; Ssc += si * co; Srs += r * si; Src += r * co;
+      const L = a + b * t, r = y[t] / L - 1, si = Math.sin(w * t), co = Math.cos(w * t), q = wt[t];
+      Sss += q * si * si; Scc += q * co * co; Ssc += q * si * co; Srs += q * r * si; Src += q * r * co;
     }
     [ks, kc] = solve([[Sss, Ssc], [Ssc, Scc]], [Srs, Src]);
     let Sgg = 0, Sgt = 0, Stt = 0, Syg = 0, Syt = 0;
     for (let t = 0; t < n; t++) {
-      const g = 1 + ks * Math.sin(w * t) + kc * Math.cos(w * t);
-      Sgg += g * g; Sgt += t * g * g; Stt += t * t * g * g; Syg += y[t] * g; Syt += y[t] * t * g;
+      const g = 1 + ks * Math.sin(w * t) + kc * Math.cos(w * t), q = wt[t];
+      Sgg += q * g * g; Sgt += q * t * g * g; Stt += q * t * t * g * g; Syg += q * y[t] * g; Syt += q * y[t] * t * g;
     }
     [a, b] = solve([[Sgg, Sgt], [Sgt, Stt]], [Syg, Syt]);
   }
@@ -307,7 +317,48 @@ function fitModel(y) {
   let sse = 0;
   for (let t = 0; t < n; t++) sse += (y[t] - m.f(t)) ** 2;
   m.sigma = Math.sqrt(sse / Math.max(1, n - 6));
+  // bruit habituel : écart relatif prix / modèle, mesuré de façon robuste (MAD) sur les 192 derniers ticks
+  const rel = y.map((v, t) => v / m.f(t) - 1), recent = rel.slice(-192);
+  const med = arr => { const s = [...arr].sort((x, z) => x - z), h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
+  const md = med(recent);
+  m.noise = 1.4826 * med(recent.map(v => Math.abs(v - md))) || 1e-9;
+  m.z = rel.slice(-3).map(v => v / m.noise); // écarts des 3 derniers ticks, en nombre de « bruits habituels »
   return m;
+}
+// Alertes par produit, même règles que detect_alerts dans scripts/algorithm.py (calibrées sur l'historique) :
+// - cours hors de son état habituel : 2 derniers ticks à plus de 3 bruits du modèle, ou 3 derniers ticks à plus de
+//   2 bruits, du même côté -> alerte forte + garde-fou (aucun ordre automatique) ; un seul tick à plus de 3 bruits -> avertissement ;
+// - tendance qui change (ex. B qui s'aplatit) : tendance des 192 derniers ticks vs tout l'historique (% par 96 ticks),
+//   alerte forte si l'écart dépasse 40 % de la tendance (et 3 points).
+let alertCache = null; // recalculé à chaque chargement des données (les ajustements de l'alerte tendance sont coûteux)
+function detectAlerts() {
+  if (alertCache) return alertCache;
+  const H = market.history, out = {};
+  for (const p of productsOk()) {
+    const m = models[p], z = m.z, list = [];
+    const sameSide = z.every(v => v > 0) || z.every(v => v < 0), side = z.at(-1) > 0 ? "au-dessus" : "en dessous";
+    if ((z.length >= 2 && Math.abs(z.at(-1)) >= 3 && Math.abs(z.at(-2)) >= 3 && z.at(-1) * z.at(-2) > 0) || (z.length === 3 && z.every(v => Math.abs(v) >= 2) && sameSide))
+      list.push({ level: "forte", kind: "ecart", blockBuy: true,
+        message: `${p} sort fortement de son état habituel : cours ${side} du modèle depuis plusieurs ticks (${z.map(v => (v >= 0 ? "+" : "") + fmt(v, 1)).join(", ")} × le bruit habituel de ±${fmt(m.noise * 100, 1)} %). Garde-fou : plus aucun achat ni vente automatique de ${p} tant que le cours ne recolle pas au modèle — à toi de décider.` });
+    else if (Math.abs(z.at(-1)) >= 3)
+      list.push({ level: "attention", kind: "ecart", blockBuy: false,
+        message: `${p} : dernier cours ${side} du modèle de ${fmt(Math.abs(z.at(-1)), 1)} × le bruit habituel (±${fmt(m.noise * 100, 1)} %). À surveiller.` });
+    const y = H.map(r => r[p]);
+    if (y.length >= 2 * 192) {
+      const lm = fitModel(y, null), rm = fitModel(y.slice(-192), null);
+      const lvlL = lm.a + lm.b * (y.length - 1), lvlR = rm.a + rm.b * 191;
+      if (lvlL > 0 && lvlR > 0) {
+        const gL = lm.b / lvlL * 100 * 96, gR = rm.b / lvlR * 100 * 96;
+        if (Math.abs(gR - gL) >= Math.max(3, 0.4 * Math.abs(gL))) {
+          const what = Math.abs(gR) < Math.abs(gL) && gR * gL >= 0 ? "s'aplatit" : gR * gL < 0 ? "s'inverse" : "s'accélère";
+          list.push({ level: "forte", kind: "tendance", blockBuy: false,
+            message: `La tendance de ${p} ${what} : ${gR >= 0 ? "+" : ""}${fmt(gR, 1)} % par tranche de 96 ticks sur les 192 derniers ticks, contre ${gL >= 0 ? "+" : ""}${fmt(gL, 1)} % sur tout l'historique.` });
+        }
+      }
+    }
+    out[p] = list;
+  }
+  return (alertCache = out);
 }
 // Phase du cycle au tick t0 : montant / descendant, ticks avant le prochain sommet / creux
 function nextTurn(m, t0) {
@@ -579,10 +630,16 @@ function renderDecision() {
   const th = readThresholds(ps);
   let money = startMoney();
   const units = startUnits(ps), dec = {}, rows = [], gauges = [];
+  const alerts = detectAlerts(), blocked = new Set(ps.filter(p => alerts[p].some(a => a.blockBuy)));
+  const all = ps.flatMap(p => alerts[p]);
+  document.getElementById("alerts").innerHTML = all.map(a =>
+    `<div class="alert ${a.level}"><b>${a.level === "forte" ? "⚠ ALERTE" : "Attention"}</b> — ${a.message}</div>`).join("");
   for (const p of ps) { // même calcul que le 1er tick de la simulation (argent partagé, ordre A, B, C)
     const m = models[p], pr = m.f(lastT + 1), z = zones(m, lastT + 1, th[p]), moneyBefore = money;
     let q = 0, reason;
-    if (z.tr > 0 && pr <= z.buyAt) {
+    if (blocked.has(p)) {
+      reason = `Garde-fou actif (cours trop loin du modèle) → aucun ordre.`;
+    } else if (z.tr > 0 && pr <= z.buyAt) {
       q = Math.min(100, Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q;
       reason = q >= 99.95 ? `Cours prévu ${fmt(pr, 3)} ≤ seuil d'achat ${fmt(z.buyAt, 3)} → <b>acheter 100 u</b>.`
         : q > 0.05 ? `Cours prévu ${fmt(pr, 3)} ≤ seuil d'achat ${fmt(z.buyAt, 3)}, mais il ne reste que ${fmt(moneyBefore, 0)} d'argent → <b>acheter ${fmt(q, 0)} u seulement</b>.`
@@ -843,6 +900,7 @@ async function load() {
     renderNextTick();
     models = {};
     for (const p of market.products) models[p] = fitModel(H.map(r => r[p]));
+    alertCache = null;
     buildSimCards();
     // Slider de simulation : par tranches de L ticks (multiple commun des périodes, ex. 96)
     const hz = cycleHorizon(1), L = hz.exact ? hz.L : 96, slider = document.getElementById("sim-hor");
