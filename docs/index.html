@@ -121,6 +121,9 @@ th { color: var(--text-secondary); font-weight: 500; }
 .cg .zb { left: 0; border-radius: 7px 0 0 7px; background: color-mix(in srgb, var(--good) 35%, transparent); }
 .cg .zs { right: 0; border-radius: 0 7px 7px 0; background: color-mix(in srgb, var(--bad) 35%, transparent); }
 .cg .tk { position: absolute; top: 26px; width: 2px; height: 22px; margin-left: -1px; }
+.ag { position: relative; display: inline-block; width: 110px; height: 10px; border-radius: 5px; background: var(--grid); vertical-align: middle; margin-right: 8px; }
+.ag i { position: absolute; top: 0; height: 10px; border-radius: 5px; }
+.ag b { position: absolute; left: 50%; top: -3px; width: 2px; height: 16px; margin-left: -1px; background: var(--text-secondary); }
 .cg .tl { position: absolute; top: 52px; font-size: 12px; white-space: nowrap; transform: translateX(-50%); font-variant-numeric: tabular-nums; }
 .cg .arrow { position: absolute; top: 36px; height: 2px; background: var(--text-primary); }
 .cg .mk { position: absolute; top: 29px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: var(--text-primary); border: 2px solid var(--surface-1); }
@@ -354,6 +357,14 @@ function detectAlerts() {
     out[p] = list;
   }
   return (alertCache = out);
+}
+// Proximité de l'alerte : barre de -1 (alerte baisse) à +1 (alerte pic), remplie depuis le centre
+function alertGauge(m) {
+  const v = Math.max(-1, Math.min(1, m.alertLevel)), pc = Math.round(Math.abs(m.alertLevel) * 100);
+  const color = v < 0 ? "var(--bad)" : "#2a78d6", side = v < 0 ? "de l'alerte baisse" : "de l'alerte pic";
+  const left = v < 0 ? 50 + v * 50 : 50, width = Math.abs(v) * 50;
+  return `<span class="ag"><i style="left:${left}%;width:${width}%;background:${color}"></i><b></b></span>`
+    + `<span style="color:${pc >= 100 ? color : "inherit"}"><b>${pc} %</b></span> <span class="muted">${side}</span>`;
 }
 // Phase du cycle au tick t0 : montant / descendant, ticks avant le prochain sommet / creux
 function nextTurn(m, t0) {
@@ -655,6 +666,7 @@ function renderDecision() {
       <td class="nowrap">${fmt(z.buyAt, 3)} / ${fmt(z.sellAt, 3)}<br><span class="muted">${Math.round(th[p].b * 100)} % / ${Math.round(th[p].s * 100)} %</span></td>
       <td class="nowrap">${turn.rising ? `sommet dans ${fmt(turn.toPeak, 0)} t` : `creux dans ${fmt(turn.toTrough, 0)} t`}</td>
       <td class="nowrap">${fmt(startUnits([p])[p], 0)} u</td>
+      <td class="nowrap">${alertGauge(m)}</td>
     </tr>`);
     // Grande jauge : de la ligne des creux (gauche) à la ligne des sommets (droite), au prochain tick
     const low = z.tr * (1 - m.k), high = z.tr * (1 + m.k), pct = v => Math.min(100, Math.max(0, (v - low) / (high - low) * 100));
@@ -662,14 +674,18 @@ function renderDecision() {
     const pB = pct(z.buyAt), pS = pct(z.sellAt), pNow = pct(H[lastT][p]), pPr = pct(pr), pFrom = pct(m.f(lastT)), right = turn.rising;
     const L = v => `${v.toFixed(2)}%`;
     const anchor = v => v > 80 ? "transform:translateX(-100%)" : v < 20 ? "transform:none" : ""; // texte vers l'intérieur près des bords
+    // seuils : le texte d'achat s'écrit à gauche de son trait, celui de vente à droite (ils ne se chevauchent jamais),
+    // sauf tout près des bords où il s'écrit vers l'intérieur
+    const buyAnchor = pB < 18 ? "transform:none;padding-left:4px" : "transform:translateX(-100%);padding-right:4px";
+    const sellAnchor = pS > 82 ? "transform:translateX(-100%);padding-right:4px" : "transform:none;padding-left:4px";
     gauges.push(`<div class="cyc">
       <div class="nm"><span class="swatch" style="background:${col(p)}"></span>${p}</div>
       <div class="end">creux<b>${fmt(low, 3)}</b></div>
       <div class="cg">
         <div class="bar"></div>
         <div class="zb" style="width:${L(pB)}"></div><div class="zs" style="width:${L(100 - pS)}"></div>
-        <div class="tk" style="left:${L(pB)};background:var(--good)"></div><div class="tl up" style="left:${L(pB)};${anchor(pB)}">achat ≤ ${fmt(z.buyAt, 3)} (${Math.round(th[p].b * 100)} %)</div>
-        <div class="tk" style="left:${L(pS)};background:var(--bad)"></div><div class="tl down" style="left:${L(pS)};${anchor(pS)}">vente ≥ ${fmt(z.sellAt, 3)} (${Math.round(th[p].s * 100)} %)</div>
+        <div class="tk" style="left:${L(pB)};background:var(--good)"></div><div class="tl up" style="left:${L(pB)};${buyAnchor}">achat ≤ ${fmt(z.buyAt, 3)} (${Math.round(th[p].b * 100)} %)</div>
+        <div class="tk" style="left:${L(pS)};background:var(--bad)"></div><div class="tl down" style="left:${L(pS)};${sellAnchor}">vente ≥ ${fmt(z.sellAt, 3)} (${Math.round(th[p].s * 100)} %)</div>
         <div class="arrow" style="left:${L(Math.min(pFrom, pPr))};width:${L(Math.abs(pPr - pFrom))}"></div>
         <div class="mk now" style="left:${L(pNow)}" title="cours actuel"></div>
         <div class="mk" style="left:${L(pPr)}" title="cours prévu au prochain tick"></div>
@@ -686,7 +702,7 @@ function renderDecision() {
       <div><div class="v ${cls}">${fmtSig(v)}</div><div class="a">${act}</div></div></div>`;
   }).join("");
   document.getElementById("justif").innerHTML =
-    `<tr><th>Produit</th><th>Cours actuel</th><th>Seuils achat / vente</th><th>Prochain retournement</th><th>Stock</th></tr>`
+    `<tr><th>Produit</th><th>Cours actuel</th><th>Seuils achat / vente</th><th>Prochain retournement</th><th>Stock</th><th>Proximité des alertes<br><span class="muted">baisse ← 0 → pic</span></th></tr>`
     + rows.join("");
   document.getElementById("cycles").innerHTML = gauges.join("");
 }
