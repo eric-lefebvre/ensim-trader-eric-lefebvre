@@ -158,16 +158,31 @@ th { color: var(--text-secondary); font-weight: 500; }
 .alert.forte { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 18%, var(--surface-1)); }
 .alert.info { border-color: #2a78d6; background: color-mix(in srgb, #2a78d6 15%, var(--surface-1)); }
 .nowrap { white-space: nowrap; }
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 16px; }
-.tabs button { border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0; background: transparent; padding: 8px 16px; color: var(--text-secondary); margin-bottom: -1px; }
-.tabs button[aria-selected="true"] { background: var(--surface-1); border-color: var(--border); color: var(--text-primary); font-weight: 600; }
+/* Barre de navigation en haut de page */
+.topnav { position: sticky; top: 0; z-index: 10; background: var(--surface-1); border-bottom: 1px solid var(--border); }
+.topnav .in { max-width: 1200px; margin: 0 auto; padding: 0 16px; display: flex; align-items: center; gap: 24px; min-height: 56px; flex-wrap: wrap; }
+.topnav .brand { font-size: 17px; font-weight: 700; white-space: nowrap; }
+.topnav nav { display: flex; gap: 4px; align-self: stretch; }
+.topnav nav a { display: flex; align-items: center; padding: 0 14px; color: var(--text-secondary); text-decoration: none; font-weight: 500; border-bottom: 3px solid transparent; }
+.topnav nav a:hover { color: var(--text-primary); }
+.topnav nav a[aria-current="page"] { color: var(--text-primary); font-weight: 700; border-bottom-color: var(--series-A); }
+.topnav .right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .gauge { position: relative; display: inline-block; width: 90px; height: 6px; border-radius: 3px; background: var(--grid); vertical-align: middle; margin: 0 6px; }
 .gauge i { position: absolute; top: -3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--text-primary); border: 2px solid var(--surface-1); }
 </style>
 </head>
 <body>
+<header class="topnav">
+  <div class="in">
+    <span class="brand">ENSIM Trade Center</span>
+    <nav>
+      <a href="#decision" data-page="main" aria-current="page">Décision</a>
+      <a href="#simulations" data-page="sim">Simulations</a>
+    </nav>
+    <div class="right"><span id="err"></span><button id="reload">Rafraîchir les données</button></div>
+  </div>
+</header>
 <main>
-  <h1>ENSIM Trade Center — Décision</h1>
   <div class="kpis">
     <div class="card kpi money" style="margin:0"><div class="l">Mon argent actuel (argent + stocks × prix)</div><div class="n" id="k-val">…</div>
       <div class="chg" id="k-val-1"></div><div class="chg" id="k-val-10"></div><div class="d" id="k-val-d"></div></div>
@@ -176,15 +191,6 @@ th { color: var(--text-secondary); font-weight: 500; }
     <div class="card kpi" style="margin:0"><div class="l">Décision publiée il y a</div><div class="n" id="k-dec">…</div><div class="d" id="k-dec-d"></div></div>
   </div>
   <div class="alerts" id="alerts"></div>
-  <div class="controls" style="margin-top:0">
-    <button id="reload">Rafraîchir les données</button>
-    <span id="err"></span>
-  </div>
-
-  <div class="tabs" role="tablist">
-    <button role="tab" data-tab="main" aria-selected="true">Décision</button>
-    <button role="tab" data-tab="sim" aria-selected="false">Simulations</button>
-  </div>
 
   <div id="tab-main">
   <!-- 1. Décision actuelle -->
@@ -1135,12 +1141,19 @@ document.getElementById("man-send").addEventListener("click", async () => {
   }
 });
 const renderAll = () => { if (!market) return; renderDecision(); renderMarket(); renderPortfolio(); renderSim(); };
-for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => {
-  for (const x of document.querySelectorAll(".tabs button")) x.setAttribute("aria-selected", x === b ? "true" : "false");
-  document.getElementById("tab-main").hidden = b.dataset.tab !== "main";
-  document.getElementById("tab-sim").hidden = b.dataset.tab !== "sim";
-  if (market) b.dataset.tab === "sim" ? renderSim() : (renderMarket(), renderPortfolio());
-});
+// Navigation : la page affichée suit l'adresse (#decision ou #simulations) ; liens et bouton « retour » fonctionnent
+function showPage() {
+  const page = location.hash === "#simulations" ? "sim" : "main";
+  for (const a of document.querySelectorAll(".topnav nav a")) {
+    if (a.dataset.page === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  }
+  document.getElementById("tab-main").hidden = page !== "main";
+  document.getElementById("tab-sim").hidden = page !== "sim";
+  window.scrollTo(0, 0);
+  if (market) page === "sim" ? renderSim() : (renderMarket(), renderPortfolio());
+}
+window.addEventListener("hashchange", showPage);
+showPage();
 document.getElementById("win").addEventListener("change", () => market && renderMarket());
 document.getElementById("hor").addEventListener("change", () => market && renderMarket());
 document.getElementById("prod").addEventListener("change", () => market && renderMarket());
