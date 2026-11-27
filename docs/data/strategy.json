@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-27T19:32:00Z",
+  "generated_at": "2026-11-27T19:50:31Z",
   "tick": 387,
   "market_generated_at": "2026-11-27T14:34:35Z",
   "market_commit": "02db61f5dfbdfde3b835a2366a7b19be63f3b164",
@@ -60,8 +60,8 @@
     "C": 1.0
   },
   "reasons": {
-    "A": "cours pr\u00e9vu 5.301 >= seuil de vente 5.090",
-    "B": "cours pr\u00e9vu 12.861 >= seuil de vente 12.718",
+    "A": "cours pr\u00e9vu 5.301 >= seuil de vente 5.127",
+    "B": "cours pr\u00e9vu 12.861 >= seuil de vente 12.663",
     "C": "cours pr\u00e9vu 0.907 <= seuil d'achat 0.927"
   },
   "alerts": {
@@ -85,8 +85,8 @@
       "shift": 0.0008955537084921007,
       "adjust": {
         "buy_mult": 1.0,
-        "buy_bonus": 0.0521735024558782,
-        "sell_bonus": 0.0
+        "buy_shift": 0.0521735024558782,
+        "sell_shift": -0.0521735024558782
       }
     },
     "B": {
@@ -102,8 +102,8 @@
       "shift": -0.005834518931060113,
       "adjust": {
         "buy_mult": 0.9008487306529948,
-        "buy_bonus": 0.0,
-        "sell_bonus": 0.04957563467350262
+        "buy_shift": -0.04957563467350262,
+        "sell_shift": 0.04957563467350262
       }
     },
     "C": {
@@ -119,8 +119,8 @@
       "shift": 1.259488669321869e-05,
       "adjust": {
         "buy_mult": 1.0,
-        "buy_bonus": 0.012699346635456833,
-        "sell_bonus": 0.0
+        "buy_shift": 0.012699346635456833,
+        "sell_shift": -0.012699346635456833
       }
     }
   },

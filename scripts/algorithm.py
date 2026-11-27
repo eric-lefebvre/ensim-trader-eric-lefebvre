@@ -293,21 +293,24 @@ def optimize_blocks(ps, pre, money0, units0, L, nb):
 
 def adjust(g):
     """Ajustement progressif de la stratégie selon la dérive g (±1 = alerte). Renvoie
-    (multiplicateur des quantités achetées, points ajoutés au seuil d'achat, points ajoutés au seuil de vente).
-    - Le produit se porte bien (g > 0) : zone d'achat un peu plus large (jusqu'à +10 points à g = 0,8), qui revient à 0
-      à l'approche d'un pic (g -> 1) : un pic n'entraîne jamais d'achat qui n'était pas prévu.
-    - Le produit se porte mal (g < 0) : dans la plage déjà vue sur l'historique (|g| <= 0,8), achats réduits un peu
-      (jusqu'à -10 %) et zone de vente avancée un peu (jusqu'à +5 points) ; au-delà (jamais vu), les achats chutent
-      jusqu'à 0 à l'alerte (|g| = 1) et la zone de vente avance jusqu'à +10 points."""
+    (multiplicateur des quantités achetées, décalage du seuil d'achat, décalage du seuil de vente), en fraction (0,05 = 5 %).
+    Achats et ventes sont décalés ensemble, dans le même sens :
+    - le produit se porte bien (g > 0) : on achète un peu plus tôt (+x %) et on vend un peu plus tard (-x %),
+      x jusqu'à 10 % à g = 0,8, puis x revient à 0 à l'approche d'un pic (g -> 1) : un pic ne déclenche aucun achat imprévu ;
+    - le produit se porte mal (g < 0) : on achète un peu plus tard (-x %) et on vend un peu plus tôt (+x %), x jusqu'à 5 %
+      dans la plage déjà vue sur l'historique (|g| <= 0,8) et jusqu'à 10 % au-delà ; les quantités achetées baissent un peu
+      (jusqu'à -10 %) dans la plage connue, puis fortement (jusqu'à 0) entre 0,8 et l'alerte."""
     a = abs(g)
     if g >= 0:
-        bonus = 0.125 * min(g, 0.8) if g <= 0.8 else max(0.0, 0.10 * (1 - g) / 0.2)
-        return 1.0, bonus, 0.0
+        x = 0.125 * g if g <= 0.8 else max(0.0, 0.10 * (1 - g) / 0.2)
+        return 1.0, x, -x
     if a <= 0.8:
-        return 1 - 0.125 * a, 0.0, 0.0625 * a
+        x = 0.0625 * a
+        return 1 - 0.125 * a, -x, x
     if a < 1:
-        return 0.90 * (1 - a) / 0.2, 0.0, 0.05 + 0.05 * (a - 0.8) / 0.2
-    return 0.0, 0.0, 0.10
+        x = 0.05 + 0.05 * (a - 0.8) / 0.2
+        return 0.90 * (1 - a) / 0.2, -x, x
+    return 0.0, -0.10, 0.10
 
 
 def next_decision(models, ps, plan, last, money, units, blocked=()):
@@ -322,9 +325,8 @@ def next_decision(models, ps, plan, last, money, units, blocked=()):
         low, high = tr * (1 - m.k), tr * (1 + m.k)
         b, s = plan[0][p]
         mult, b_bonus, s_bonus = adjust(m.g)          # ajustement progressif selon la dérive
-        b, s = min(1.0, b + b_bonus), min(1.0, s + s_bonus)
-        if p in SELL_LE_BUY:
-            s = min(s, b)
+        # (la règle « vente <= achat » de B porte sur les seuils optimisés ; l'ajustement temporaire peut la dépasser)
+        b, s = min(1.0, max(0.0, b + b_bonus)), min(1.0, max(0.0, s + s_bonus))
         buy_at, sell_at = low + b * (tr - low), high - s * (high - tr)
         q = 0.0
         if tr > 0 and pr <= buy_at and p in blocked:
@@ -515,7 +517,7 @@ def main():
         "alerts": st["alerts"],
         "expected_value": round(value, 2),
         "expected_value_fixed_thresholds": round(fixed_value, 2),
-        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi, "noise": m.noise, "alert_score": m.alert_score, "alert_level": m.alert_level, "g": m.g, "shift": m.shift, "adjust": dict(zip(["buy_mult", "buy_bonus", "sell_bonus"], adjust(m.g)))} for p, m in models.items()},
+        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi, "noise": m.noise, "alert_score": m.alert_score, "alert_level": m.alert_level, "g": m.g, "shift": m.shift, "adjust": dict(zip(["buy_mult", "buy_shift", "sell_shift"], adjust(m.g)))} for p, m in models.items()},
         "compute_seconds": round(time.time() - started, 1),
     }
     os.makedirs(os.path.dirname(STRATEGY_FILE), exist_ok=True)
