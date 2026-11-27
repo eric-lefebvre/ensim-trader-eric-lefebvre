@@ -183,8 +183,8 @@ th { color: var(--text-secondary); font-weight: 500; }
   <section class="card">
     <div class="controls" style="margin:0">
       <label>Durée simulée
-        <input id="sim-hor" type="range" autocomplete="off" min="96" max="960" step="96" value="480" style="vertical-align:middle;width:220px">
-        <b id="sim-hor-val">5 blocs · 480 ticks</b>
+        <input id="sim-hor" type="range" autocomplete="off" min="96" max="288" step="96" value="288" style="vertical-align:middle;width:220px">
+        <b id="sim-hor-val">3 tranches · 288 ticks</b>
       </label>
       <button id="sim-opt">Trouver les meilleurs seuils</button>
       <span class="muted" id="sim-opt-res"></span>
@@ -322,7 +322,7 @@ function simulateJoint(ps, th, t0, money0, units0, T, withCurve = true, pre = pr
       if (tr > 0 && pr <= low + thi[p].b * (tr - low)) {
         const q = Math.min(100, Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q;
       } else if (tr > 0 && pr >= high - thi[p].s * (high - tr)) {
-        const q = Math.min(100, units[p]); money += q * pr; units[p] -= q;
+        const q = Math.min(100, sellable(p, units[p])); money += q * pr; units[p] -= q;
       }
       val += units[p] * pr;
       if (withCurve) stock[p].push({ x: i, y: units[p] });
@@ -385,25 +385,22 @@ function simFrom(ps, plan, pre, i0, money, units0, T) {
     for (const p of ps) {
       const d = pre[p], pr = d.pr[i], tr = d.tr[i], low = d.low[i], high = d.high[i];
       if (tr > 0 && pr <= low + thi[p].b * (tr - low)) { const q = Math.min(100, Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q; }
-      else if (tr > 0 && pr >= high - thi[p].s * (high - tr)) { const q = Math.min(100, units[p]); money += q * pr; units[p] -= q; }
+      else if (tr > 0 && pr >= high - thi[p].s * (high - tr)) { const q = Math.min(100, sellable(p, units[p])); money += q * pr; units[p] -= q; }
       val += units[p] * pr;
     }
   }
   return { money, units, value: money + val };
 }
 const MIN_GAIN = 0.0005; // comme MIN_GAIN dans scripts/algorithm.py
-function optimizeBlocks(T) {
-  const lastT = market.history.length - 1, ps = productsOk();
-  const hz = cycleHorizon(T), Ttot = hz.T, L = hz.exact ? hz.L : Ttot, nb = Math.max(1, Math.round(Ttot / L));
-  const money0 = startMoney(), units0 = startUnits(ps);
-  const grid = Array.from({ length: 21 }, (_, i) => i * 0.05);
-  const pre = precompute(ps, lastT, Ttot);
-  const fixed = optimizeThresholds(Ttot);
-  const plan = Array.from({ length: nb }, () => JSON.parse(JSON.stringify(fixed.th)));
+// Amélioration tranche par tranche, produit par produit (max 3 tours), à partir du plan donné
+// (même logique que descend dans scripts/algorithm.py).
+// - Stabilité : un changement n'est retenu que s'il améliore la valeur finale de plus de MIN_GAIN (0,05 %).
+// - Produit dont la tendance atteint 0 pendant l'horizon (ex. C) : d'une tranche à la suivante, le seuil
+//   d'achat ne peut que baisser et le seuil de vente que monter (on pousse de plus en plus à la vente).
+function descendPlan(ps, start, pre, money0, units0, L, dying) {
+  const nb = start.length, Ttot = nb * L, grid = Array.from({ length: 21 }, (_, i) => i * 0.05);
+  const plan = start.map(b => JSON.parse(JSON.stringify(b)));
   plan.L = L;
-  // Produits dont la tendance atteint 0 pendant l'horizon (ex. C) : d'une tranche à la suivante, le seuil
-  // d'achat ne peut que baisser et le seuil de vente que monter (on pousse de plus en plus à la vente).
-  const dying = new Set(ps.filter(p => pre[p].tr.slice(1).some(v => v <= 0)));
   let best = simFrom(ps, plan, pre, 0, money0, units0, Ttot).value;
   for (let round = 0; round < 3; round++) {
     let improved = false;
@@ -418,19 +415,47 @@ function optimizeBlocks(T) {
           const v = simFrom(ps, plan, pre, k * L, st.money, st.units, Ttot).value;
           if (v > candV) { candV = v; cand = { b, s }; }
         }
-        // stabilité : on ne change que si la valeur finale gagne plus de MIN_GAIN (0,05 %)
         if (cand && candV > best * (1 + MIN_GAIN)) { best = candV; plan[k][p] = cand; improved = true; } else plan[k][p] = keep;
       }
     }
     if (!improved) break;
   }
-  return { plan, value: best, fixedValue: fixed.value, hz };
+  return { plan, value: best };
+}
+// Plusieurs points de départ, on garde le meilleur (même logique que optimize_blocks dans scripts/algorithm.py) :
+//  1) meilleurs seuils identiques sur tout l'horizon ; 2) tranche 1 = meilleurs seuils sur 1 seule tranche,
+//  suivantes = 1) ; 3) meilleurs seuils sur 1 seule tranche dans toutes les tranches.
+function optimizeBlocks(T) {
+  const lastT = market.history.length - 1, ps = productsOk();
+  const hz = cycleHorizon(T), Ttot = hz.T, L = hz.exact ? hz.L : Ttot, nb = Math.max(1, Math.round(Ttot / L));
+  const money0 = startMoney(), units0 = startUnits(ps);
+  const pre = precompute(ps, lastT, Ttot);
+  const fixed = optimizeThresholds(Ttot);
+  const dying = new Set(ps.filter(p => pre[p].tr.slice(1).some(v => v <= 0)));
+  const copy = th => JSON.parse(JSON.stringify(th));
+  const starts = [Array.from({ length: nb }, () => copy(fixed.th))];
+  if (nb > 1) {
+    const one = optimizeBlocks(L).plan[0];
+    const first = Object.fromEntries(ps.map(p => [p, dying.has(p) ? fixed.th[p] : one[p]]));
+    starts.push([copy(first), ...Array.from({ length: nb - 1 }, () => copy(fixed.th))]);
+    starts.push(Array.from({ length: nb }, () => copy(first)));
+  }
+  let best = null;
+  for (const st of starts) {
+    const r = descendPlan(ps, st, pre, money0, units0, L, dying);
+    if (!best || r.value > best.value + 1e-6) best = r;
+  }
+  return { plan: best.plan, value: best.value, fixedValue: fixed.value, hz };
 }
 
 /* ---------- Aides ---------- */
 // Garde budgétaire fournie par le manuel (apply_budget_guard dans scripts/algorithm.py), même logique :
 // un achat ne fait jamais descendre l'argent sous MIN_MONEY_RESERVE.
 const MIN_MONEY_RESERVE = 50;
+// Stock minimum par produit, comme MIN_STOCK dans scripts/algorithm.py : le stock de B ne descend jamais
+// sous son niveau de départ (1000) -> depuis le début du jeu, les ventes de B ne dépassent jamais les achats.
+const MIN_STOCK = { B: 1000 };
+const sellable = (p, units) => Math.max(0, units - (MIN_STOCK[p] || 0));
 function applyBudgetGuard(raw, money, price, reserve = MIN_MONEY_RESERVE) {
   if (raw <= 0) return raw;
   if (money <= reserve) return 0;
@@ -518,7 +543,7 @@ function renderDecision() {
         : q > 0.05 ? `Cours prévu ${fmt(pr, 3)} ≤ seuil d'achat ${fmt(z.buyAt, 3)}, mais il ne reste que ${fmt(moneyBefore, 0)} d'argent → <b>acheter ${fmt(q, 0)} u seulement</b>.`
         : `Zone d'achat, mais plus d'argent disponible → rien.`;
     } else if (z.tr > 0 && pr >= z.sellAt) {
-      q = -Math.min(100, units[p]); money -= q * pr; units[p] += q;
+      q = -Math.min(100, sellable(p, units[p])); money -= q * pr; units[p] += q;
       reason = -q >= 99.95 ? `Cours prévu ${fmt(pr, 3)} ≥ seuil de vente ${fmt(z.sellAt, 3)} → <b>vendre 100 u</b>.`
         : -q > 0.05 ? `Cours prévu ${fmt(pr, 3)} ≥ seuil de vente ${fmt(z.sellAt, 3)}, stock restant ${fmt(-q, 0)} u → <b>tout vendre</b>.`
         : `Zone de vente, mais plus de stock → rien.`;
@@ -623,7 +648,7 @@ function renderSim() {
   if (!thresholdsReady() || document.getElementById("tab-sim").hidden) return;
   const H = market.history, lastT = H.length - 1, ps = productsOk();
   const T = +document.getElementById("sim-hor").value, L = +document.getElementById("sim-hor").step;
-  document.getElementById("sim-hor-val").textContent = `${Math.round(T / L)} bloc${T / L > 1 ? "s" : ""} · ${T} ticks`;
+  document.getElementById("sim-hor-val").textContent = `${Math.round(T / L)} tranche${T / L > 1 ? "s" : ""} · ${T} ticks (≈ ${ticksToDuration(T)})`;
   const plan = currentPlan(ps), thAt = thAtFn(plan), money0 = startMoney(), units0 = startUnits(ps);
   const r = simulateJoint(ps, plan, lastT, money0, units0, T);
   const totCol = css("--series-total");
@@ -696,7 +721,7 @@ function applyPlan(plan, sourceTxt) {
   }
   const cyc = ps.map(p => { const n = Math.round(L / Math.round(models[p].P)); return `${n} cycle${n > 1 ? "s" : ""} de ${p}`; }).join(", ");
   document.getElementById("sim-opt-res").innerHTML =
-    `Seuils par tranche de <b>${L} ticks</b> (1 tranche = ${cyc}), sur ${nb} tranches (${nb * L} ticks). ${sourceTxt}`
+    `Seuils par tranche de <b>${L} ticks</b>, soit <b>≈ ${ticksToDuration(L)}</b> au rythme actuel des ticks (1 tranche = ${cyc}), sur ${nb} tranches (${nb * L} ticks). ${sourceTxt}`
     + `<br>La décision actuelle utilise les seuils de la tranche 1 (modifiables sur chaque graphique) ; les tranches suivantes servent à la simulation.`;
   const head = `<tr><th>Tranche</th><th>Ticks</th>` + ps.map(p => `<th><span class="swatch" style="background:${col(p)}"></span> ${p} achat / vente</th>`).join("") + `</tr>`;
   document.getElementById("sim-blocks").innerHTML = `<table>${head}` + plan.map((th, k) =>
@@ -725,8 +750,8 @@ async function load() {
     buildSimCards();
     // Slider de simulation : par tranches de L ticks (multiple commun des périodes, ex. 96)
     const hz = cycleHorizon(1), L = hz.exact ? hz.L : 96, slider = document.getElementById("sim-hor");
-    const nb = strategy && strategy.block_ticks === L ? strategy.blocks : 5;
-    slider.min = L; slider.step = L; slider.max = 10 * L; slider.value = nb * L;
+    const nb = strategy && strategy.block_ticks === L ? Math.min(3, strategy.blocks) : 3;
+    slider.min = L; slider.step = L; slider.max = 3 * L; slider.value = nb * L;
     renderMarket();
     if (strategy && strategy.tick === H.at(-1).t && strategy.block_ticks === L) {
       // Même tick que le workflow : on reprend ses seuils (la décision affichée = celle publiée)
@@ -740,6 +765,17 @@ async function load() {
   } catch (e) {
     document.getElementById("err").textContent = "Impossible de charger les données : " + e;
   }
+}
+// Écart médian entre les 30 derniers ticks (même estimation que l'en-tête) et durée de n ticks
+function medianTickGapMs() {
+  const H = market.history, gaps = [];
+  for (let i = Math.max(1, H.length - 30); i < H.length; i++) gaps.push(new Date(H[i].timestamp) - new Date(H[i - 1].timestamp));
+  gaps.sort((a, b) => a - b);
+  return gaps[Math.floor(gaps.length / 2)];
+}
+function ticksToDuration(n) {
+  const h = n * medianTickGapMs() / 3.6e6;
+  return h < 48 ? `${fmt(h, 0)} h` : `${fmt(h / 24, 0)} jours`;
 }
 // Chiffres de l'en-tête (mis à jour chaque minute) : temps depuis le dernier tick, temps estimé avant le
 // prochain (dernier tick + écart médian des 30 derniers ticks), âge de la décision publiée.
@@ -755,7 +791,7 @@ function renderNextTick() {
   set("k-since", hm(now - last));
   set("k-since-d", `tick n° ${H.at(-1).t} · ${day(last)}`);
   const left = next - now;
-  set("k-next", left > 0 ? `≈ ${hm(left)}` : `<span class="down">en retard</span>`);
+  set("k-next", left > 0 ? `≈ ${hm(left)}` : `en retard`);
   set("k-next-d", (left > 0 ? `vers ${day(next)}` : `attendu vers ${day(next)}, retard de ${hm(left)}`) + ` · écart habituel ${hm(median)}`);
   const pub = published?.updated_at ? new Date(published.updated_at) : null;
   set("k-dec", pub ? hm(now - pub) : "—");

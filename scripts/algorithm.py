@@ -25,7 +25,7 @@ HOLDINGS_PATH = f"traders/{TRADER}/holdings.json"
 MARKET_URL = f"https://raw.githubusercontent.com/{ORGANIZER}/refs/heads/main/{MARKET_PATH}"
 HOLDINGS_URL = f"https://raw.githubusercontent.com/{ORGANIZER}/refs/heads/main/{HOLDINGS_PATH}"
 STRATEGY_FILE = "docs/data/strategy.json"
-N_BLOCKS = 5          # horizon de recherche = 5 blocs (480 ticks avec des blocs de 96)
+N_BLOCKS = 3          # horizon de recherche = 3 tranches (288 ticks avec des tranches de 96)
 LOT = 100             # unités max par tick et par produit (règle du marché)
 GRID = np.round(np.arange(21) * 0.05, 2)          # seuils 0 %, 5 %, ..., 100 %
 GRID_B = np.repeat(GRID, 21)                       # 441 paires (achat, vente), même ordre que le dashboard
@@ -34,6 +34,10 @@ GRID_S = np.tile(GRID, 21)
 
 # ---------------------------------------------------------------- données
 MIN_MONEY_RESERVE = 50 # never let a buy signal spend below this much money
+
+# Stock minimum par produit : on ne vend jamais en dessous (pour B : depuis le début du jeu, les ventes
+# ne dépassent jamais les achats -> le stock de B ne descend jamais sous son niveau de départ, 1000).
+MIN_STOCK = {"B": 1000.0}
 
 # --- fourni par le manuel (TP_2_STUDENT_MANUAL), inchangé ---
 def fetch_json(url):
@@ -160,7 +164,7 @@ def simulate(ps, plan, L, pre, i0, money, units, T, vary=None):
                 buy = pr <= low + b * (tr - low)
                 sell = ~buy & (pr >= high - s * (high - tr))
                 qb = np.where(buy, np.minimum(LOT, np.maximum(0.0, (money - MIN_MONEY_RESERVE) / pr)), 0.0)
-                qs = np.where(sell, np.minimum(LOT, units[p]), 0.0)
+                qs = np.where(sell, np.minimum(LOT, np.maximum(0.0, units[p] - MIN_STOCK.get(p, 0.0))), 0.0)
                 money = money - qb * pr + qs * pr
                 units[p] = units[p] + qb - qs
             val = val + units[p] * pr
@@ -189,15 +193,14 @@ def optimize_fixed(ps, pre, money0, units0, T):
 
 MIN_GAIN = 0.0005   # on ne change les seuils d'une tranche que si la valeur finale gagne plus de 0,05 %
 
-def optimize_blocks(ps, pre, money0, units0, L, nb):
-    """Seuils propres à chaque tranche de L ticks (départ : meilleurs seuils fixes), max 3 tours.
+def descend(ps, plan, pre, money0, units0, L, dying):
+    """Amélioration tranche par tranche, produit par produit (max 3 tours), à partir du plan donné.
     - Stabilité : un changement n'est retenu que s'il améliore la valeur finale de plus de MIN_GAIN.
     - Produit dont la tendance atteint 0 pendant l'horizon (ex. C) : d'une tranche à la suivante, le seuil
       d'achat ne peut que baisser et le seuil de vente que monter (on pousse de plus en plus à la vente)."""
+    nb = len(plan)
     T = L * nb
-    fixed, fixed_value = optimize_fixed(ps, pre, money0, units0, T)
-    plan = [dict(fixed) for _ in range(nb)]
-    dying = {p for p in ps if (pre[p]["tr"][1:] <= 0).any()}
+    plan = [dict(b) for b in plan]
     best = simulate(ps, plan, L, pre, 0, money0, units0, T)[0][0]
     for _ in range(3):
         improved = False
@@ -218,7 +221,30 @@ def optimize_blocks(ps, pre, money0, units0, L, nb):
                     best, plan[k][p], improved = float(v[j]), (float(GRID_B[j]), float(GRID_S[j])), True
         if not improved:
             break
-    return plan, float(best), fixed_value
+    return plan, float(best)
+
+def optimize_blocks(ps, pre, money0, units0, L, nb):
+    """Seuils propres à chaque tranche de L ticks. Pour ne pas rester bloqué sur une solution « assez bonne »,
+    la recherche part de plusieurs plans et garde le meilleur :
+      1) les meilleurs seuils identiques sur tout l'horizon ;
+      2) tranche 1 = meilleurs seuils sur 1 seule tranche, tranches suivantes = 1) ;
+      3) les meilleurs seuils sur 1 seule tranche, recopiés dans toutes les tranches.
+    (pour un produit qui tend vers 0, les départs gardent des seuils identiques dans toutes les tranches)."""
+    T = L * nb
+    fixed, fixed_value = optimize_fixed(ps, pre, money0, units0, T)
+    dying = {p for p in ps if (pre[p]["tr"][1:] <= 0).any()}
+    starts = [[dict(fixed) for _ in range(nb)]]
+    if nb > 1:
+        one, _, _ = optimize_blocks(ps, pre, money0, units0, L, 1)
+        first = {p: (fixed[p] if p in dying else one[0][p]) for p in ps}
+        starts.append([first] + [dict(fixed) for _ in range(nb - 1)])
+        starts.append([dict(first) for _ in range(nb)])
+    best_plan, best = None, -np.inf
+    for start in starts:
+        plan, value = descend(ps, start, pre, money0, units0, L, dying)
+        if value > best + 1e-6:
+            best_plan, best = plan, value
+    return best_plan, float(best), fixed_value
 
 
 def next_decision(models, ps, plan, last, money, units):
@@ -239,7 +265,7 @@ def next_decision(models, ps, plan, last, money, units):
             units[p] += q
             reasons[p] = f"cours prévu {pr:.3f} <= seuil d'achat {buy_at:.3f}"
         elif tr > 0 and pr >= sell_at:
-            q = -min(LOT, units[p])
+            q = -min(LOT, max(0.0, units[p] - MIN_STOCK.get(p, 0.0)))
             money -= q * pr
             units[p] += q
             reasons[p] = f"cours prévu {pr:.3f} >= seuil de vente {sell_at:.3f}"
