@@ -106,13 +106,15 @@ th { color: var(--text-secondary); font-weight: 500; }
 .kpi.money .n { font-size: 40px; }
 .kpi .chg { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 /* Répartition du portefeuille */
-.alloc-bar { display: flex; height: 16px; border-radius: 8px; overflow: hidden; margin: 10px 0 14px; gap: 2px; }
-.alloc-bar i { display: block; height: 100%; }
+.alloc-bar { display: flex; height: 30px; border-radius: 8px; overflow: hidden; margin: 0 0 16px; gap: 2px; }
+.alloc-bar i { display: flex; align-items: center; justify-content: center; height: 100%; font-style: normal; font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; }
 .alloc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 700px) { .alloc { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.alloc .pc { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
-.alloc .val { font-size: 16px; font-variant-numeric: tabular-nums; }
-.alloc .lim { font-size: 12px; color: var(--text-muted); }
+.alloc > div { border: 1px solid var(--border); border-left: 6px solid var(--c); border-radius: 10px; padding: 12px 16px; }
+.alloc .nm { font-size: 18px; font-weight: 700; }
+.alloc .pc { font-size: 46px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.05; margin: 4px 0 2px; }
+.alloc .val { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.alloc .lim { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
 .kpi .l { font-size: 13px; color: var(--text-secondary); }
 .kpi .n { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; margin: 4px 0; }
 .kpi .d { font-size: 12px; color: var(--text-muted); }
@@ -1032,11 +1034,12 @@ function renderAllocation() {
   const parts = ps.map(p => ({ k: p, v: (holdings?.products?.[p] ?? 0) * last[p], color: css("--series-" + p) }));
   parts.push({ k: "Argent", v: holdings?.money ?? 0, color: css("--text-muted") });
   const total = parts.reduce((a, x) => a + x.v, 0) || 1;
-  document.getElementById("alloc-bar").innerHTML = parts.map(x => `<i style="width:${(x.v / total * 100).toFixed(2)}%;background:${x.color}" title="${x.k} : ${fmt(x.v / total * 100, 1)} %"></i>`).join("");
+  document.getElementById("alloc-bar").innerHTML = parts.map(x => { const pc = x.v / total * 100;
+    return `<i style="width:${pc.toFixed(2)}%;background:${x.color}" title="${x.k} : ${fmt(pc, 1)} %">${pc >= 8 ? `${x.k} ${fmt(pc, 0)} %` : ""}</i>`; }).join("");
   document.getElementById("alloc").innerHTML = parts.map(x => {
     const pc = x.v / total * 100, r = ALLOC[x.k];
     const lim = r ? `règle ${Math.round(r[0] * 100)}–${Math.round(r[1] * 100)} %${pc < r[0] * 100 || pc > r[1] * 100 ? ` · <span class="down">hors limites</span>` : ""}` : (x.k === "Argent" ? "liquide" : "aucune règle");
-    return `<div><div class="l" style="display:flex;align-items:center;gap:6px"><span class="swatch" style="background:${x.color}"></span>${x.k}</div>
+    return `<div style="--c:${x.color}"><div class="nm">${x.k}</div>
       <div class="pc">${fmt(pc, 0)} %</div><div class="val">${fmt(x.v, 0)}</div><div class="lim">${lim}</div></div>`;
   }).join("");
 }
