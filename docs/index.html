@@ -105,6 +105,14 @@ th { color: var(--text-secondary); font-weight: 500; }
 @media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } }
 .kpi.money .n { font-size: 40px; }
 .kpi .chg { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Répartition du portefeuille */
+.alloc-bar { display: flex; height: 16px; border-radius: 8px; overflow: hidden; margin: 10px 0 14px; gap: 2px; }
+.alloc-bar i { display: block; height: 100%; }
+.alloc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 700px) { .alloc { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.alloc .pc { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.alloc .val { font-size: 16px; font-variant-numeric: tabular-nums; }
+.alloc .lim { font-size: 12px; color: var(--text-muted); }
 .kpi .l { font-size: 13px; color: var(--text-secondary); }
 .kpi .n { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; margin: 4px 0; }
 .kpi .d { font-size: 12px; color: var(--text-muted); }
@@ -155,6 +163,11 @@ th { color: var(--text-secondary); font-weight: 500; }
     <div class="card kpi" style="margin:0"><div class="l">Avant le prochain tick (estimé)</div><div class="n" id="k-next">…</div><div class="d" id="k-next-d"></div></div>
     <div class="card kpi" style="margin:0"><div class="l">Décision publiée il y a</div><div class="n" id="k-dec">…</div><div class="d" id="k-dec-d"></div></div>
   </div>
+  <section class="card">
+    <h2>Répartition du portefeuille</h2>
+    <div class="alloc-bar" id="alloc-bar"></div>
+    <div class="alloc" id="alloc"></div>
+  </section>
   <div class="alerts" id="alerts"></div>
   <div class="controls" style="margin-top:0">
     <button id="reload">Rafraîchir les données</button>
@@ -976,6 +989,7 @@ async function load() {
     decisionLog = await fetch(LOG_URL + bust).then(r => r.json()).catch(() => null);
     const H = market.history;
     renderNextTick();
+    renderAllocation();
     models = {};
     for (const p of market.products) models[p] = fitModel(H.map(r => r[p]));
     alertCache = null;
@@ -1008,6 +1022,21 @@ function medianTickGapMs() {
 function ticksToDuration(n) {
   const h = n * medianTickGapMs() / 3.6e6;
   return h < 48 ? `${fmt(h, 0)} h` : `${fmt(h / 24, 0)} jours`;
+}
+// Répartition du portefeuille : part et valeur de A, B, C et de l'argent (holdings réels × dernier prix),
+// avec la règle d'allocation de A et B (entre 20 % et 75 %)
+function renderAllocation() {
+  const H = market.history, last = H.at(-1), ps = market.products;
+  const parts = ps.map(p => ({ k: p, v: (holdings?.products?.[p] ?? 0) * last[p], color: css("--series-" + p) }));
+  parts.push({ k: "Argent", v: holdings?.money ?? 0, color: css("--text-muted") });
+  const total = parts.reduce((a, x) => a + x.v, 0) || 1;
+  document.getElementById("alloc-bar").innerHTML = parts.map(x => `<i style="width:${(x.v / total * 100).toFixed(2)}%;background:${x.color}" title="${x.k} : ${fmt(x.v / total * 100, 1)} %"></i>`).join("");
+  document.getElementById("alloc").innerHTML = parts.map(x => {
+    const pc = x.v / total * 100, r = ALLOC[x.k];
+    const lim = r ? `règle ${Math.round(r[0] * 100)}–${Math.round(r[1] * 100)} %${pc < r[0] * 100 || pc > r[1] * 100 ? ` · <span class="down">hors limites</span>` : ""}` : (x.k === "Argent" ? "liquide" : "aucune règle");
+    return `<div><div class="l" style="display:flex;align-items:center;gap:6px"><span class="swatch" style="background:${x.color}"></span>${x.k}</div>
+      <div class="pc">${fmt(pc, 0)} %</div><div class="val">${fmt(x.v, 0)}</div><div class="lim">${lim}</div></div>`;
+  }).join("");
 }
 // Chiffres de l'en-tête (mis à jour chaque minute) : temps depuis le dernier tick, temps estimé avant le
 // prochain (dernier tick + écart médian des 30 derniers ticks), âge de la décision publiée.
