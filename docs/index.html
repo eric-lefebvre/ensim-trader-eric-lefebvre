@@ -448,9 +448,11 @@ function simulateJoint(ps, th, t0, money0, units0, T, withCurve = true, pre = pr
     for (const p of ps) {
       const d = pre[p], pr = d.pr[i], tr = d.tr[i], low = d.low[i], high = d.high[i];
       if (tr > 0 && pr <= low + thi[p].b * (tr - low)) {
-        const q = Math.min(100, Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q;
+        const tot = money + ps.reduce((a2, x) => a2 + units[x] * pre[x].pr[i], 0);
+        const q = Math.min(100, allocBuyCap(p, units[p], pr, tot), Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q;
       } else if (tr > 0 && pr >= high - thi[p].s * (high - tr)) {
-        const q = Math.min(100, units[p]); money += q * pr; units[p] -= q;
+        const tot = money + ps.reduce((a2, x) => a2 + units[x] * pre[x].pr[i], 0);
+        const q = Math.min(100, units[p], allocSellCap(p, units[p], pr, tot)); money += q * pr; units[p] -= q;
       }
       val += units[p] * pr;
       if (withCurve) stock[p].push({ x: i, y: units[p] });
@@ -480,7 +482,6 @@ function optimizeThresholds(T) {
   for (const p of ps) {
     let best = null;
     for (const b of grid) for (const s of grid) {
-      if (forbidden(p, b, s)) continue;
       const v = simulateJoint([p], { [p]: { b, s } }, lastT, money0, { [p]: units0[p] }, T, false, pre).value;
       if (!best || v > best.v + 1e-9) best = { v, b, s };
     }
@@ -490,7 +491,6 @@ function optimizeThresholds(T) {
   for (let round = 0; round < 4; round++) {
     let improved = false;
     for (const p of ps) for (const b of grid) for (const s of grid) {
-      if (forbidden(p, b, s)) continue;
       const trial = { ...th, [p]: { b, s } };
       const v = simulateJoint(ps, trial, lastT, money0, units0, T, false, pre).value;
       if (v > bestV + 1e-6) { bestV = v; th[p] = { b, s }; improved = true; }
@@ -514,8 +514,9 @@ function simFrom(ps, plan, pre, i0, money, units0, T) {
     const thi = thAt(i);
     for (const p of ps) {
       const d = pre[p], pr = d.pr[i], tr = d.tr[i], low = d.low[i], high = d.high[i];
-      if (tr > 0 && pr <= low + thi[p].b * (tr - low)) { const q = Math.min(100, Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q; }
-      else if (tr > 0 && pr >= high - thi[p].s * (high - tr)) { const q = Math.min(100, units[p]); money += q * pr; units[p] -= q; }
+      const tot = money + ps.reduce((a2, x) => a2 + units[x] * pre[x].pr[i], 0);
+      if (tr > 0 && pr <= low + thi[p].b * (tr - low)) { const q = Math.min(100, allocBuyCap(p, units[p], pr, tot), Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q; }
+      else if (tr > 0 && pr >= high - thi[p].s * (high - tr)) { const q = Math.min(100, units[p], allocSellCap(p, units[p], pr, tot)); money += q * pr; units[p] -= q; }
       val += units[p] * pr;
     }
   }
@@ -540,7 +541,6 @@ function descendPlan(ps, start, pre, money0, units0, L, dying) {
         const keep = plan[k][p], prev = k > 0 ? plan[k - 1][p] : null, next = k < nb - 1 ? plan[k + 1][p] : null;
         let cand = null, candV = -Infinity;
         for (const b of grid) for (const s of grid) {
-          if (forbidden(p, b, s)) continue;
           if (dying.has(p) && ((prev && (b > prev.b + 1e-9 || s < prev.s - 1e-9)) || (next && (b < next.b - 1e-9 || s > next.s + 1e-9)))) continue;
           plan[k][p] = { b, s };
           const v = simFrom(ps, plan, pre, k * L, st.money, st.units, Ttot).value;
@@ -583,10 +583,11 @@ function optimizeBlocks(T) {
 // Garde budgétaire fournie par le manuel (apply_budget_guard dans scripts/algorithm.py), même logique :
 // un achat ne fait jamais descendre l'argent sous MIN_MONEY_RESERVE.
 const MIN_MONEY_RESERVE = 50;
-// Produits dont le seuil de vente doit rester ≤ au seuil d'achat (comme SELL_LE_BUY dans scripts/algorithm.py) :
-// leur zone de vente n'est jamais plus large que leur zone d'achat -> on stocke du B sur la durée.
-const SELL_LE_BUY = new Set(["B"]);
-const forbidden = (p, b, s) => SELL_LE_BUY.has(p) && s > b + 1e-9;
+// Règle d'allocation (comme ALLOC dans scripts/algorithm.py) : A et B chacun entre 20 % et 75 % du portefeuille total
+// (argent + stocks × prix) ; un achat est réduit s'il ferait dépasser 75 %, une vente s'il ferait passer sous 20 %. Rien pour C.
+const ALLOC = { A: [0.20, 0.75], B: [0.20, 0.75] };
+const allocBuyCap = (p, u, pr, tot) => ALLOC[p] ? Math.max(0, (ALLOC[p][1] * tot - u * pr) / pr) : Infinity;
+const allocSellCap = (p, u, pr, tot) => ALLOC[p] ? Math.max(0, (u * pr - ALLOC[p][0] * tot) / pr) : Infinity;
 function applyBudgetGuard(raw, money, price, reserve = MIN_MONEY_RESERVE) {
   if (raw <= 0) return raw;
   if (money <= reserve) return 0;
@@ -610,7 +611,6 @@ function readThresholds(ps) {
   return Object.fromEntries(ps.map(p => {
     const b = clamp01(document.getElementById("sim-buy-" + p).value), el = document.getElementById("sim-sell-" + p);
     let sv = clamp01(el.value);
-    if (forbidden(p, b, sv)) { sv = b; el.value = Math.round(b * 100); } // règle : seuil de vente ≤ seuil d'achat pour B
     return [p, { b, s: sv }];
   }));
 }
@@ -673,6 +673,8 @@ function renderDecision() {
   const th = readThresholds(ps);
   let money = startMoney();
   const units = startUnits(ps), dec = {}, rows = [], gauges = [], adj = {}, base = {};
+  const prices = Object.fromEntries(ps.map(x => [x, models[x].fa(lastT + 1)])); // prix prévus (règle d'allocation)
+  const totalNow = () => money + ps.reduce((a2, x) => a2 + units[x] * prices[x], 0);
   const alerts = detectAlerts(), blocked = new Set(ps.filter(p => alerts[p].some(a => a.blockBuy)));
   const all = ps.flatMap(p => alerts[p]);
   document.getElementById("alerts").innerHTML = all.map(a =>
@@ -690,12 +692,12 @@ function renderDecision() {
     if (z.tr > 0 && pr <= z.buyAt && blocked.has(p)) {
       reason = `Zone d'achat, mais alerte de baisse → achats coupés.`;
     } else if (z.tr > 0 && pr <= z.buyAt) {
-      q = Math.min(100 * adj[p][0], Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q;
+      q = Math.min(100 * adj[p][0], allocBuyCap(p, units[p], pr, totalNow()), Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q;
       reason = q >= 99.95 ? `Cours prévu ${fmt(pr, 3)} ≤ seuil d'achat ${fmt(z.buyAt, 3)} → <b>acheter 100 u</b>.`
         : q > 0.05 ? `Cours prévu ${fmt(pr, 3)} ≤ seuil d'achat ${fmt(z.buyAt, 3)}, mais il ne reste que ${fmt(moneyBefore, 0)} d'argent → <b>acheter ${fmt(q, 0)} u seulement</b>.`
         : `Zone d'achat, mais plus d'argent disponible → rien.`;
     } else if (z.tr > 0 && pr >= z.sellAt) {
-      q = -Math.min(100, units[p]); money -= q * pr; units[p] += q;
+      q = -Math.min(100, units[p], allocSellCap(p, units[p], pr, totalNow())); money -= q * pr; units[p] += q;
       reason = -q >= 99.95 ? `Cours prévu ${fmt(pr, 3)} ≥ seuil de vente ${fmt(z.sellAt, 3)} → <b>vendre 100 u</b>.`
         : -q > 0.05 ? `Cours prévu ${fmt(pr, 3)} ≥ seuil de vente ${fmt(z.sellAt, 3)}, stock restant ${fmt(-q, 0)} u → <b>tout vendre</b>.`
         : `Zone de vente, mais plus de stock → rien.`;

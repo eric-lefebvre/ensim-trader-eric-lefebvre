@@ -37,13 +37,17 @@ GRID_S = np.tile(GRID, 21)
 # ---------------------------------------------------------------- données
 MIN_MONEY_RESERVE = 50 # never let a buy signal spend below this much money
 
-# Produits dont le seuil de vente doit rester inférieur ou égal au seuil d'achat : leur zone de vente n'est
-# jamais plus large que leur zone d'achat, donc sur un cycle on achète au moins autant qu'on vend (stocker du B).
-SELL_LE_BUY = {"B"}
+# Règle d'allocation : A et B doivent chacun représenter entre 20 % et 75 % du portefeuille total
+# (argent + stocks × prix). Un achat est réduit s'il ferait dépasser 75 %, une vente s'il ferait passer sous 20 %.
+# Aucune règle pour C.
+ALLOC = {"A": (0.20, 0.75), "B": (0.20, 0.75)}
 
-def allowed(p):
-    """Paires (achat, vente) autorisées pour p parmi les 441 de la grille (None = toutes)."""
-    return (GRID_S <= GRID_B + 1e-9) if p in SELL_LE_BUY else None
+def alloc_caps(p, units_p, price, total):
+    """(unités achetables, unités vendables) pour respecter la règle d'allocation de p (inf = pas de limite)."""
+    if p not in ALLOC:
+        return np.inf, np.inf
+    lo, hi = ALLOC[p]
+    return np.maximum(0.0, (hi * total - units_p * price) / price), np.maximum(0.0, (units_p * price - lo * total) / price)
 
 # --- fourni par le manuel (TP_2_STUDENT_MANUAL), inchangé ---
 def fetch_json(url):
@@ -201,8 +205,10 @@ def simulate(ps, plan, L, pre, i0, money, units, T, vary=None):
             if tr > 0:
                 buy = pr <= low + b * (tr - low)
                 sell = ~buy & (pr >= high - s * (high - tr))
-                qb = np.where(buy, np.minimum(LOT, np.maximum(0.0, (money - MIN_MONEY_RESERVE) / pr)), 0.0)
-                qs = np.where(sell, np.minimum(LOT, units[p]), 0.0)
+                total = money + sum(units[q] * pre[q]["pr"][i] for q in ps)    # portefeuille total à ce tick
+                cap_b, cap_s = alloc_caps(p, units[p], pr, total)
+                qb = np.where(buy, np.minimum(np.minimum(LOT, cap_b), np.maximum(0.0, (money - MIN_MONEY_RESERVE) / pr)), 0.0)
+                qs = np.where(sell, np.minimum(np.minimum(LOT, units[p]), cap_s), 0.0)
                 money = money - qb * pr + qs * pr
                 units[p] = units[p] + qb - qs
             val = val + units[p] * pr
@@ -215,8 +221,6 @@ def optimize_fixed(ps, pre, money0, units0, T):
     th = {}
     for p in ps:
         v, _, _ = simulate([p], [{p: (0.2, 0.2)}], big, pre, 0, money0, {p: units0[p]}, T, vary=(None, p))
-        if allowed(p) is not None:
-            v = np.where(allowed(p), v, -np.inf)
         j = int(np.argmax(v))
         th[p] = (float(GRID_B[j]), float(GRID_S[j]))
     best = simulate(ps, [th], big, pre, 0, money0, units0, T)[0][0]
@@ -224,8 +228,6 @@ def optimize_fixed(ps, pre, money0, units0, T):
         improved = False
         for p in ps:
             v, _, _ = simulate(ps, [th], big, pre, 0, money0, units0, T, vary=(None, p))
-            if allowed(p) is not None:
-                v = np.where(allowed(p), v, -np.inf)
             j = int(np.argmax(v))
             if v[j] > best + 1e-6:
                 best, th[p], improved = float(v[j]), (float(GRID_B[j]), float(GRID_S[j])), True
@@ -258,8 +260,6 @@ def descend(ps, plan, pre, money0, units0, L, dying):
                     if k < nb - 1:
                         ok &= (GRID_B >= plan[k + 1][p][0] - 1e-9) & (GRID_S <= plan[k + 1][p][1] + 1e-9)
                     v = np.where(ok, v, -np.inf)
-                if allowed(p) is not None:
-                    v = np.where(allowed(p), v, -np.inf)
                 j = int(np.argmax(v))
                 if v[j] > best * (1 + MIN_GAIN):
                     best, plan[k][p], improved = float(v[j]), (float(GRID_B[j]), float(GRID_S[j])), True
@@ -318,6 +318,7 @@ def next_decision(models, ps, plan, last, money, units, blocked=()):
     blocked = produits en alerte de baisse : aucun achat (les ventes restent possibles)."""
     dec, reasons = {}, {}
     units = dict(units)
+    prices = {q: float(models[q].fa(last + 1)) for q in ps}     # prix prévus au prochain tick (règle d'allocation)
     for p in ps:
         m = models[p]
         t = last + 1
@@ -325,19 +326,19 @@ def next_decision(models, ps, plan, last, money, units, blocked=()):
         low, high = tr * (1 - m.k), tr * (1 + m.k)
         b, s = plan[0][p]
         mult, b_bonus, s_bonus = adjust(m.g)          # ajustement progressif selon la dérive
-        # (la règle « vente <= achat » de B porte sur les seuils optimisés ; l'ajustement temporaire peut la dépasser)
         b, s = min(1.0, max(0.0, b + b_bonus)), min(1.0, max(0.0, s + s_bonus))
         buy_at, sell_at = low + b * (tr - low), high - s * (high - tr)
         q = 0.0
+        cap_b, cap_s = alloc_caps(p, units[p], pr, money + sum(units[x] * prices[x] for x in ps))
         if tr > 0 and pr <= buy_at and p in blocked:
             reasons[p] = f"cours prévu {pr:.3f} <= seuil d'achat {buy_at:.3f}, mais alerte de baisse : achats coupés"
         elif tr > 0 and pr <= buy_at:
-            q = min(LOT * mult, max(0.0, (money - MIN_MONEY_RESERVE) / pr))
+            q = min(LOT * mult, cap_b, max(0.0, (money - MIN_MONEY_RESERVE) / pr))
             money -= q * pr
             units[p] += q
             reasons[p] = f"cours prévu {pr:.3f} <= seuil d'achat {buy_at:.3f}" + (f" (achats x{mult:.2f})" if mult < 1 else "")
         elif tr > 0 and pr >= sell_at:
-            q = -min(LOT, units[p])
+            q = -min(LOT, units[p], cap_s)
             money -= q * pr
             units[p] += q
             reasons[p] = f"cours prévu {pr:.3f} >= seuil de vente {sell_at:.3f}"
