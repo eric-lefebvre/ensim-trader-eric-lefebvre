@@ -322,7 +322,7 @@ function simulateJoint(ps, th, t0, money0, units0, T, withCurve = true, pre = pr
       if (tr > 0 && pr <= low + thi[p].b * (tr - low)) {
         const q = Math.min(100, Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q;
       } else if (tr > 0 && pr >= high - thi[p].s * (high - tr)) {
-        const q = Math.min(100, sellable(p, units[p])); money += q * pr; units[p] -= q;
+        const q = Math.min(100, units[p]); money += q * pr; units[p] -= q;
       }
       val += units[p] * pr;
       if (withCurve) stock[p].push({ x: i, y: units[p] });
@@ -352,6 +352,7 @@ function optimizeThresholds(T) {
   for (const p of ps) {
     let best = null;
     for (const b of grid) for (const s of grid) {
+      if (forbidden(p, b, s)) continue;
       const v = simulateJoint([p], { [p]: { b, s } }, lastT, money0, { [p]: units0[p] }, T, false, pre).value;
       if (!best || v > best.v + 1e-9) best = { v, b, s };
     }
@@ -361,6 +362,7 @@ function optimizeThresholds(T) {
   for (let round = 0; round < 4; round++) {
     let improved = false;
     for (const p of ps) for (const b of grid) for (const s of grid) {
+      if (forbidden(p, b, s)) continue;
       const trial = { ...th, [p]: { b, s } };
       const v = simulateJoint(ps, trial, lastT, money0, units0, T, false, pre).value;
       if (v > bestV + 1e-6) { bestV = v; th[p] = { b, s }; improved = true; }
@@ -385,7 +387,7 @@ function simFrom(ps, plan, pre, i0, money, units0, T) {
     for (const p of ps) {
       const d = pre[p], pr = d.pr[i], tr = d.tr[i], low = d.low[i], high = d.high[i];
       if (tr > 0 && pr <= low + thi[p].b * (tr - low)) { const q = Math.min(100, Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q; }
-      else if (tr > 0 && pr >= high - thi[p].s * (high - tr)) { const q = Math.min(100, sellable(p, units[p])); money += q * pr; units[p] -= q; }
+      else if (tr > 0 && pr >= high - thi[p].s * (high - tr)) { const q = Math.min(100, units[p]); money += q * pr; units[p] -= q; }
       val += units[p] * pr;
     }
   }
@@ -410,6 +412,7 @@ function descendPlan(ps, start, pre, money0, units0, L, dying) {
         const keep = plan[k][p], prev = k > 0 ? plan[k - 1][p] : null, next = k < nb - 1 ? plan[k + 1][p] : null;
         let cand = null, candV = -Infinity;
         for (const b of grid) for (const s of grid) {
+          if (forbidden(p, b, s)) continue;
           if (dying.has(p) && ((prev && (b > prev.b + 1e-9 || s < prev.s - 1e-9)) || (next && (b < next.b - 1e-9 || s > next.s + 1e-9)))) continue;
           plan[k][p] = { b, s };
           const v = simFrom(ps, plan, pre, k * L, st.money, st.units, Ttot).value;
@@ -452,10 +455,10 @@ function optimizeBlocks(T) {
 // Garde budgétaire fournie par le manuel (apply_budget_guard dans scripts/algorithm.py), même logique :
 // un achat ne fait jamais descendre l'argent sous MIN_MONEY_RESERVE.
 const MIN_MONEY_RESERVE = 50;
-// Stock minimum par produit, comme MIN_STOCK dans scripts/algorithm.py : le stock de B ne descend jamais
-// sous son niveau de départ (1000) -> depuis le début du jeu, les ventes de B ne dépassent jamais les achats.
-const MIN_STOCK = { B: 1000 };
-const sellable = (p, units) => Math.max(0, units - (MIN_STOCK[p] || 0));
+// Produits dont le seuil de vente doit rester ≤ au seuil d'achat (comme SELL_LE_BUY dans scripts/algorithm.py) :
+// leur zone de vente n'est jamais plus large que leur zone d'achat -> on stocke du B sur la durée.
+const SELL_LE_BUY = new Set(["B"]);
+const forbidden = (p, b, s) => SELL_LE_BUY.has(p) && s > b + 1e-9;
 function applyBudgetGuard(raw, money, price, reserve = MIN_MONEY_RESERVE) {
   if (raw <= 0) return raw;
   if (money <= reserve) return 0;
@@ -476,8 +479,14 @@ function currentPlan(ps) {
   return plan;
 }
 function readThresholds(ps) {
-  return Object.fromEntries(ps.map(p => [p, { b: clamp01(document.getElementById("sim-buy-" + p).value), s: clamp01(document.getElementById("sim-sell-" + p).value) }]));
+  return Object.fromEntries(ps.map(p => {
+    const b = clamp01(document.getElementById("sim-buy-" + p).value), el = document.getElementById("sim-sell-" + p);
+    let sv = clamp01(el.value);
+    if (forbidden(p, b, sv)) { sv = b; el.value = Math.round(b * 100); } // règle : seuil de vente ≤ seuil d'achat pour B
+    return [p, { b, s: sv }];
+  }));
 }
+
 
 /* ---------- Graphiques ---------- */
 // Barre verticale en pointillés (et zone de prévision grisée à droite si shade)
@@ -543,7 +552,7 @@ function renderDecision() {
         : q > 0.05 ? `Cours prévu ${fmt(pr, 3)} ≤ seuil d'achat ${fmt(z.buyAt, 3)}, mais il ne reste que ${fmt(moneyBefore, 0)} d'argent → <b>acheter ${fmt(q, 0)} u seulement</b>.`
         : `Zone d'achat, mais plus d'argent disponible → rien.`;
     } else if (z.tr > 0 && pr >= z.sellAt) {
-      q = -Math.min(100, sellable(p, units[p])); money -= q * pr; units[p] += q;
+      q = -Math.min(100, units[p]); money -= q * pr; units[p] += q;
       reason = -q >= 99.95 ? `Cours prévu ${fmt(pr, 3)} ≥ seuil de vente ${fmt(z.sellAt, 3)} → <b>vendre 100 u</b>.`
         : -q > 0.05 ? `Cours prévu ${fmt(pr, 3)} ≥ seuil de vente ${fmt(z.sellAt, 3)}, stock restant ${fmt(-q, 0)} u → <b>tout vendre</b>.`
         : `Zone de vente, mais plus de stock → rien.`;

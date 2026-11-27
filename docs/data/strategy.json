@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-27T13:28:33Z",
+  "generated_at": "2026-11-27T13:35:27Z",
   "tick": 386,
   "market_generated_at": "2026-11-27T04:41:52Z",
   "market_commit": "15c6d1532235f9da58fd2fc938bd337e1872f866",
@@ -8,12 +8,12 @@
   "plan": [
     {
       "A": {
-        "buy": 0.85,
-        "sell": 0.95
+        "buy": 0.75,
+        "sell": 0.75
       },
       "B": {
-        "buy": 0.2,
-        "sell": 0.55
+        "buy": 0.25,
+        "sell": 0.25
       },
       "C": {
         "buy": 0.4,
@@ -23,11 +23,11 @@
     {
       "A": {
         "buy": 0.85,
-        "sell": 0.95
+        "sell": 0.85
       },
       "B": {
-        "buy": 0.2,
-        "sell": 0.45
+        "buy": 0.35,
+        "sell": 0.35
       },
       "C": {
         "buy": 0.4,
@@ -36,12 +36,12 @@
     },
     {
       "A": {
-        "buy": 0.6,
+        "buy": 0.75,
         "sell": 0.95
       },
       "B": {
-        "buy": 0.2,
-        "sell": 0.4
+        "buy": 0.65,
+        "sell": 0.5
       },
       "C": {
         "buy": 0.0,
@@ -50,22 +50,22 @@
     }
   ],
   "signal_raw": {
-    "A": -1.0,
-    "B": 0.0,
+    "A": 0.0,
+    "B": -1.0,
     "C": 0.0
   },
   "decision": {
-    "A": -1.0,
-    "B": 0.0,
+    "A": 0.0,
+    "B": -1.0,
     "C": 0.0
   },
   "reasons": {
-    "A": "cours pr\u00e9vu 5.140 >= seuil de vente 5.015",
-    "B": "cours pr\u00e9vu 13.008 >= seuil de vente 12.365",
+    "A": "cours pr\u00e9vu 5.140 entre 4.799 et 5.159",
+    "B": "cours pr\u00e9vu 13.008 >= seuil de vente 12.716",
     "C": "cours pr\u00e9vu 0.968 entre 0.916 et 1.087"
   },
-  "expected_value": 43931.06,
-  "expected_value_fixed_thresholds": 43482.95,
+  "expected_value": 52578.41,
+  "expected_value_fixed_thresholds": 52117.74,
   "models": {
     "A": {
       "period": 48.0,
@@ -89,5 +89,5 @@
       "phase": 3.0190962661991407
     }
   },
-  "compute_seconds": 2.5
+  "compute_seconds": 2.9
 }

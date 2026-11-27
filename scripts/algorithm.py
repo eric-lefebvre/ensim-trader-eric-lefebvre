@@ -35,9 +35,13 @@ GRID_S = np.tile(GRID, 21)
 # ---------------------------------------------------------------- données
 MIN_MONEY_RESERVE = 50 # never let a buy signal spend below this much money
 
-# Stock minimum par produit : on ne vend jamais en dessous (pour B : depuis le début du jeu, les ventes
-# ne dépassent jamais les achats -> le stock de B ne descend jamais sous son niveau de départ, 1000).
-MIN_STOCK = {"B": 1000.0}
+# Produits dont le seuil de vente doit rester inférieur ou égal au seuil d'achat : leur zone de vente n'est
+# jamais plus large que leur zone d'achat, donc sur un cycle on achète au moins autant qu'on vend (stocker du B).
+SELL_LE_BUY = {"B"}
+
+def allowed(p):
+    """Paires (achat, vente) autorisées pour p parmi les 441 de la grille (None = toutes)."""
+    return (GRID_S <= GRID_B + 1e-9) if p in SELL_LE_BUY else None
 
 # --- fourni par le manuel (TP_2_STUDENT_MANUAL), inchangé ---
 def fetch_json(url):
@@ -164,7 +168,7 @@ def simulate(ps, plan, L, pre, i0, money, units, T, vary=None):
                 buy = pr <= low + b * (tr - low)
                 sell = ~buy & (pr >= high - s * (high - tr))
                 qb = np.where(buy, np.minimum(LOT, np.maximum(0.0, (money - MIN_MONEY_RESERVE) / pr)), 0.0)
-                qs = np.where(sell, np.minimum(LOT, np.maximum(0.0, units[p] - MIN_STOCK.get(p, 0.0))), 0.0)
+                qs = np.where(sell, np.minimum(LOT, units[p]), 0.0)
                 money = money - qb * pr + qs * pr
                 units[p] = units[p] + qb - qs
             val = val + units[p] * pr
@@ -177,6 +181,8 @@ def optimize_fixed(ps, pre, money0, units0, T):
     th = {}
     for p in ps:
         v, _, _ = simulate([p], [{p: (0.2, 0.2)}], big, pre, 0, money0, {p: units0[p]}, T, vary=(None, p))
+        if allowed(p) is not None:
+            v = np.where(allowed(p), v, -np.inf)
         j = int(np.argmax(v))
         th[p] = (float(GRID_B[j]), float(GRID_S[j]))
     best = simulate(ps, [th], big, pre, 0, money0, units0, T)[0][0]
@@ -184,6 +190,8 @@ def optimize_fixed(ps, pre, money0, units0, T):
         improved = False
         for p in ps:
             v, _, _ = simulate(ps, [th], big, pre, 0, money0, units0, T, vary=(None, p))
+            if allowed(p) is not None:
+                v = np.where(allowed(p), v, -np.inf)
             j = int(np.argmax(v))
             if v[j] > best + 1e-6:
                 best, th[p], improved = float(v[j]), (float(GRID_B[j]), float(GRID_S[j])), True
@@ -216,6 +224,8 @@ def descend(ps, plan, pre, money0, units0, L, dying):
                     if k < nb - 1:
                         ok &= (GRID_B >= plan[k + 1][p][0] - 1e-9) & (GRID_S <= plan[k + 1][p][1] + 1e-9)
                     v = np.where(ok, v, -np.inf)
+                if allowed(p) is not None:
+                    v = np.where(allowed(p), v, -np.inf)
                 j = int(np.argmax(v))
                 if v[j] > best * (1 + MIN_GAIN):
                     best, plan[k][p], improved = float(v[j]), (float(GRID_B[j]), float(GRID_S[j])), True
@@ -265,7 +275,7 @@ def next_decision(models, ps, plan, last, money, units):
             units[p] += q
             reasons[p] = f"cours prévu {pr:.3f} <= seuil d'achat {buy_at:.3f}"
         elif tr > 0 and pr >= sell_at:
-            q = -min(LOT, max(0.0, units[p] - MIN_STOCK.get(p, 0.0)))
+            q = -min(LOT, units[p])
             money -= q * pr
             units[p] += q
             reasons[p] = f"cours prévu {pr:.3f} >= seuil de vente {sell_at:.3f}"
