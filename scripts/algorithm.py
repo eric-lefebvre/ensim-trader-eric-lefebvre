@@ -88,8 +88,8 @@ def fetch_feeds():
 
 
 # ---------------------------------------------------------------- modèle
-HALF_LIFE = 96    # forme des cycles : poids d'un tick divisé par 2 tous les 96 ticks (≈ 1 cycle de B, ≈ 27 jours)
-RECENT_HALF_LIFE = 1   # écart récent au modèle : demi-vie de 1 tick (≈ 7 h), il domine la prévision du prochain tick
+HALF_LIFE = None  # prévisions : tout l'historique, chaque tick a le même poids (le présent ne les bouscule pas)
+DRIFT_TICKS = 24  # alerte de dérive : écart moyen au modèle sur les 24 derniers ticks (≈ 7 jours)
 
 class Model:
     def __init__(self, y, half_life=HALF_LIFE):
@@ -129,20 +129,13 @@ class Model:
         rel = y / self.f(t) - 1
         recent = rel[-192:]
         self.noise = float(1.4826 * np.median(np.abs(recent - np.median(recent)))) or 1e-9
-        self.z = (rel[-3:] / self.noise).tolist()    # écarts des 3 derniers ticks, en nombre de « bruits habituels »
-        # Écart récent au modèle (dernier tick surtout) et sa mémoire d'un tick au suivant (≈ 0,5 : dans le marché,
-        # chaque prix garde la moitié du précédent). La prévision part de cet écart, qui s'estompe tick après tick.
-        wr = 0.5 ** ((n - 1 - t) / RECENT_HALF_LIFE)
-        self.last = n - 1
-        self.recent_dev = float((wr * rel).sum() / wr.sum())
-        kk = min(192, n - 1)
-        self.rho = max(0.0, float(np.corrcoef(rel[-kk - 1:-1], rel[-kk:])[0, 1])) if kk > 2 else 0.0
+        # Le présent pèse sur les alertes, pas sur les prévisions :
+        self.z = (rel[-3:] / self.noise).tolist()                   # écarts des 3 derniers ticks (en « bruits habituels »)
+        self.drift = float((rel[-DRIFT_TICKS:] / self.noise).mean())  # écart moyen sur les 24 derniers ticks
 
     def fa(self, t):
-        """Prévision utilisée pour décider : modèle × (1 + écart récent × rho^h), h = ticks après le dernier."""
-        t = np.asarray(t, dtype=float)
-        h = np.maximum(t - self.last, 0)
-        return np.maximum(self.f(t) * (1 + self.recent_dev * self.rho ** h), 0.01)
+        """Prévision utilisée pour décider : le modèle ajusté sur tout l'historique."""
+        return self.f(t)
 
     def trend(self, t):
         return np.maximum(self.a + self.b * np.asarray(t, dtype=float), 0)
@@ -316,45 +309,41 @@ def next_decision(models, ps, plan, last, money, units, blocked=()):
 
 
 # ---------------------------------------------------------------- alertes et garde-fou
+Z2, Z3 = 5.0, 4.0   # alerte forte : 2 ticks de suite à plus de 5 bruits du modèle, ou 3 ticks de suite à plus de 4
+Z1 = 4.0            # avertissement : un seul tick à plus de 4 bruits
+ZD = 1.5            # dérive : écart moyen sur les 24 derniers ticks à plus de 1,5 bruit
+
 def detect_alerts(models, history, products):
-    """Alertes par produit (calibrées sur l'historique : aucune ne s'est déclenchée en temps normal).
-    - Cours hors de son état habituel : 2 derniers ticks à plus de 3 bruits du modèle, ou 3 derniers ticks à plus
-      de 2 bruits, toujours du même côté  -> alerte forte + garde-fou (plus aucun ordre automatique sur ce produit :
-      le modèle ne colle plus, ses prévisions ne sont fiables ni pour acheter ni pour vendre).
-      Un seul tick à plus de 3 bruits -> simple avertissement.
-    - Tendance qui change (ex. B qui s'aplatit) : tendance des 192 derniers ticks comparée à celle de tout
-      l'historique, en % par tranche de 96 ticks ; alerte forte si l'écart dépasse 40 % de la tendance (et 3 points)."""
+    """Alertes pour les gros problèmes, calibrées sur l'historique (aucune ne s'est déclenchée en temps normal :
+    au plus 70 % du seuil pour l'écart, 62 % pour la dérive). Elles ne regardent que le présent.
+    - Écart : cours très loin du modèle 2 ou 3 ticks de suite, du même côté -> alerte forte + garde-fou
+      (plus aucun ordre automatique sur ce produit : le modèle ne colle plus, ses prévisions ne sont pas fiables).
+    - Dérive : cours en moyenne nettement au-dessus ou en dessous du modèle sur les 24 derniers ticks
+      (ex. B qui s'aplatit : il glisse sous son modèle tick après tick) -> alerte forte, sans garde-fou.
+    - Un seul tick très loin -> avertissement."""
     alerts = {}
     for p in products:
         m = models.get(p)
         if m is None:
             continue
-        out = []
-        z = m.z
-        same_side = all(v > 0 for v in z) or all(v < 0 for v in z)
+        out, z = [], m.z
         side = "au-dessus" if z[-1] > 0 else "en dessous"
-        if (len(z) >= 2 and abs(z[-1]) >= 3 and abs(z[-2]) >= 3 and z[-1] * z[-2] > 0) or (len(z) == 3 and all(abs(v) >= 2 for v in z) and same_side):
+        if (abs(z[-1]) >= Z2 and abs(z[-2]) >= Z2 and z[-1] * z[-2] > 0) or \
+           (all(abs(v) >= Z3 for v in z) and (all(v > 0 for v in z) or all(v < 0 for v in z))):
             out.append({"level": "forte", "kind": "ecart", "block_buy": True,
                         "message": f"{p} sort fortement de son état habituel : cours {side} du modèle depuis plusieurs ticks "
                                    f"({', '.join(f'{v:+.1f}' for v in z)} × le bruit habituel de ±{m.noise * 100:.1f} %). "
                                    f"Garde-fou : plus aucun achat ni vente automatique de {p} tant que le cours ne recolle pas au modèle -- à toi de décider."})
-        elif abs(z[-1]) >= 3:
+        elif abs(z[-1]) >= Z1:
             out.append({"level": "attention", "kind": "ecart", "block_buy": False,
                         "message": f"{p} : dernier cours {side} du modèle de {abs(z[-1]):.1f} × le bruit habituel (±{m.noise * 100:.1f} %). À surveiller."})
-        y = [row[p] for row in history]
-        if len(y) >= 2 * 192:
-            long_m, recent_m = Model(y, half_life=None), Model(y[-192:], half_life=None)
-            lvl_long = long_m.a + long_m.b * (len(y) - 1)
-            lvl_recent = recent_m.a + recent_m.b * 191
-            if lvl_long > 0 and lvl_recent > 0:
-                g_long = long_m.b / lvl_long * 100 * 96
-                g_recent = recent_m.b / lvl_recent * 100 * 96
-                if abs(g_recent - g_long) >= max(3.0, 0.4 * abs(g_long)):
-                    what = "s'aplatit" if abs(g_recent) < abs(g_long) and g_recent * g_long >= 0 else \
-                           "s'inverse" if g_recent * g_long < 0 else "s'accélère"
-                    out.append({"level": "forte", "kind": "tendance", "block_buy": False,
-                                "message": f"La tendance de {p} {what} : {g_recent:+.1f} % par tranche de 96 ticks sur les 192 derniers ticks, "
-                                           f"contre {g_long:+.1f} % sur tout l'historique."})
+        if abs(m.drift) >= ZD:
+            what = "sous" if m.drift < 0 else "au-dessus de"
+            trend = ("sa tendance s'aplatit ou baisse" if m.drift < 0 else "sa tendance s'accélère") if m.b > 0 else \
+                    ("sa baisse s'accélère" if m.drift < 0 else "sa baisse ralentit")
+            out.append({"level": "forte", "kind": "derive", "block_buy": False,
+                        "message": f"{p} dérive {what} son modèle depuis {DRIFT_TICKS} ticks (≈ 7 jours) : écart moyen de "
+                                   f"{m.drift:+.1f} × le bruit habituel. Probablement {trend} : le modèle (sur tout l'historique) ne suit plus."})
         alerts[p] = out
     return alerts
 
@@ -504,7 +493,7 @@ def main():
         "alerts": st["alerts"],
         "expected_value": round(value, 2),
         "expected_value_fixed_thresholds": round(fixed_value, 2),
-        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi, "noise": m.noise, "z": m.z, "recent_dev": m.recent_dev, "rho": m.rho} for p, m in models.items()},
+        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi, "noise": m.noise, "z": m.z, "drift": m.drift} for p, m in models.items()},
         "compute_seconds": round(time.time() - started, 1),
     }
     os.makedirs(os.path.dirname(STRATEGY_FILE), exist_ok=True)

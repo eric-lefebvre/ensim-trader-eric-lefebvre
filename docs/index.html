@@ -100,8 +100,11 @@ th { color: var(--text-secondary); font-weight: 500; }
 @media (max-width: 700px) { .decision { grid-template-columns: 1fr; } }
 .dec { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 16px; }
 .dec .p { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0 0 16px; }
-@media (max-width: 700px) { .kpis { grid-template-columns: 1fr; } }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0 0 16px; }
+@media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } }
+.kpi.money .n { font-size: 40px; }
+.kpi .chg { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .kpi .l { font-size: 13px; color: var(--text-secondary); }
 .kpi .n { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; margin: 4px 0; }
 .kpi .d { font-size: 12px; color: var(--text-muted); }
@@ -143,6 +146,8 @@ th { color: var(--text-secondary); font-weight: 500; }
 <main>
   <h1>ENSIM Trade Center — Décision</h1>
   <div class="kpis">
+    <div class="card kpi money" style="margin:0"><div class="l">Mon argent actuel (argent + stocks × prix)</div><div class="n" id="k-val">…</div>
+      <div class="chg" id="k-val-1"></div><div class="chg" id="k-val-10"></div><div class="d" id="k-val-d"></div></div>
     <div class="card kpi" style="margin:0"><div class="l">Depuis le dernier tick</div><div class="n" id="k-since">…</div><div class="d" id="k-since-d"></div></div>
     <div class="card kpi" style="margin:0"><div class="l">Avant le prochain tick (estimé)</div><div class="n" id="k-next">…</div><div class="d" id="k-next-d"></div></div>
     <div class="card kpi" style="margin:0"><div class="l">Décision publiée il y a</div><div class="n" id="k-dec">…</div><div class="d" id="k-dec-d"></div></div>
@@ -282,8 +287,8 @@ function fitFixedPeriod(y, P, wt) {
 // P est trouvé par balayage ; niveau, dérive, k et φ par moindres carrés alternés.
 // Les événements récents comptent plus : poids d'un tick divisé par 2 tous les HALF_LIFE ticks dans le passé
 // (halfLife = null : tous les ticks pareils). Même calcul que Model dans scripts/algorithm.py.
-const HALF_LIFE = 96;       // forme des cycles (≈ 1 cycle de B), comme HALF_LIFE dans scripts/algorithm.py
-const RECENT_HALF_LIFE = 1;  // écart récent au modèle (≈ 7 h), comme RECENT_HALF_LIFE
+const HALF_LIFE = null;  // prévisions sur tout l'historique, chaque tick au même poids (comme HALF_LIFE en Python)
+const DRIFT_TICKS = 24;  // alerte de dérive : écart moyen au modèle sur les 24 derniers ticks (≈ 7 jours)
 function fitModel(y, halfLife = HALF_LIFE) {
   const n = y.length;
   if (n < 12) return null;
@@ -324,54 +329,37 @@ function fitModel(y, halfLife = HALF_LIFE) {
   const md = med(recent);
   m.noise = 1.4826 * med(recent.map(v => Math.abs(v - md))) || 1e-9;
   m.z = rel.slice(-3).map(v => v / m.noise); // écarts des 3 derniers ticks, en nombre de « bruits habituels »
-  // Écart récent au modèle (dernier tick surtout) et sa mémoire d'un tick au suivant (≈ 0,5 dans le marché) :
-  // la prévision part de cet écart, qui s'estompe tick après tick (même calcul que Model.fa en Python).
-  let sw = 0, sr = 0;
-  for (let t = 0; t < n; t++) { const q = Math.pow(0.5, (n - 1 - t) / RECENT_HALF_LIFE); sw += q; sr += q * rel[t]; }
-  m.recentDev = sr / sw;
-  const kk = Math.min(192, n - 1), xs = rel.slice(-kk - 1, -1), ys = rel.slice(-kk);
-  const mx = xs.reduce((a2, v) => a2 + v, 0) / kk, my = ys.reduce((a2, v) => a2 + v, 0) / kk;
-  let cxy = 0, cxx = 0, cyy = 0;
-  for (let i = 0; i < kk; i++) { cxy += (xs[i] - mx) * (ys[i] - my); cxx += (xs[i] - mx) ** 2; cyy += (ys[i] - my) ** 2; }
-  m.rho = kk > 2 ? Math.max(0, cxy / Math.sqrt(cxx * cyy)) : 0;
-  m.fa = t => Math.max(m.f(t) * (1 + m.recentDev * Math.pow(m.rho, Math.max(t - (n - 1), 0))), 0.01);
+  m.drift = rel.slice(-DRIFT_TICKS).reduce((a2, v) => a2 + v / m.noise, 0) / Math.min(DRIFT_TICKS, n); // écart moyen récent
+  m.fa = t => m.f(t); // prévision utilisée pour décider : le modèle ajusté sur tout l'historique
   return m;
 }
-// Alertes par produit, même règles que detect_alerts dans scripts/algorithm.py (calibrées sur l'historique) :
-// - cours hors de son état habituel : 2 derniers ticks à plus de 3 bruits du modèle, ou 3 derniers ticks à plus de
-//   2 bruits, du même côté -> alerte forte + garde-fou (aucun ordre automatique) ; un seul tick à plus de 3 bruits -> avertissement ;
-// - tendance qui change (ex. B qui s'aplatit) : tendance des 192 derniers ticks vs tout l'historique (% par 96 ticks),
-//   alerte forte si l'écart dépasse 40 % de la tendance (et 3 points).
-let alertCache = null; // recalculé à chaque chargement des données (les ajustements de l'alerte tendance sont coûteux)
+// Alertes pour les gros problèmes (mêmes règles et seuils que detect_alerts dans scripts/algorithm.py),
+// calibrées sur l'historique : aucune ne s'est déclenchée en temps normal. Elles ne regardent que le présent.
+const Z2 = 5, Z3 = 4, Z1 = 4, ZD = 1.5;
+let alertCache = null; // recalculé à chaque chargement des données
 function detectAlerts() {
   if (alertCache) return alertCache;
-  const H = market.history, out = {};
+  const out = {};
   for (const p of productsOk()) {
-    const m = models[p], z = m.z, list = [];
-    const sameSide = z.every(v => v > 0) || z.every(v => v < 0), side = z.at(-1) > 0 ? "au-dessus" : "en dessous";
-    if ((z.length >= 2 && Math.abs(z.at(-1)) >= 3 && Math.abs(z.at(-2)) >= 3 && z.at(-1) * z.at(-2) > 0) || (z.length === 3 && z.every(v => Math.abs(v) >= 2) && sameSide))
+    const m = models[p], z = m.z, list = [], side = z.at(-1) > 0 ? "au-dessus" : "en dessous";
+    if ((Math.abs(z.at(-1)) >= Z2 && Math.abs(z.at(-2)) >= Z2 && z.at(-1) * z.at(-2) > 0) ||
+        (z.every(v => Math.abs(v) >= Z3) && (z.every(v => v > 0) || z.every(v => v < 0))))
       list.push({ level: "forte", kind: "ecart", blockBuy: true,
         message: `${p} sort fortement de son état habituel : cours ${side} du modèle depuis plusieurs ticks (${z.map(v => (v >= 0 ? "+" : "") + fmt(v, 1)).join(", ")} × le bruit habituel de ±${fmt(m.noise * 100, 1)} %). Garde-fou : plus aucun achat ni vente automatique de ${p} tant que le cours ne recolle pas au modèle — à toi de décider.` });
-    else if (Math.abs(z.at(-1)) >= 3)
+    else if (Math.abs(z.at(-1)) >= Z1)
       list.push({ level: "attention", kind: "ecart", blockBuy: false,
         message: `${p} : dernier cours ${side} du modèle de ${fmt(Math.abs(z.at(-1)), 1)} × le bruit habituel (±${fmt(m.noise * 100, 1)} %). À surveiller.` });
-    const y = H.map(r => r[p]);
-    if (y.length >= 2 * 192) {
-      const lm = fitModel(y, null), rm = fitModel(y.slice(-192), null);
-      const lvlL = lm.a + lm.b * (y.length - 1), lvlR = rm.a + rm.b * 191;
-      if (lvlL > 0 && lvlR > 0) {
-        const gL = lm.b / lvlL * 100 * 96, gR = rm.b / lvlR * 100 * 96;
-        if (Math.abs(gR - gL) >= Math.max(3, 0.4 * Math.abs(gL))) {
-          const what = Math.abs(gR) < Math.abs(gL) && gR * gL >= 0 ? "s'aplatit" : gR * gL < 0 ? "s'inverse" : "s'accélère";
-          list.push({ level: "forte", kind: "tendance", blockBuy: false,
-            message: `La tendance de ${p} ${what} : ${gR >= 0 ? "+" : ""}${fmt(gR, 1)} % par tranche de 96 ticks sur les 192 derniers ticks, contre ${gL >= 0 ? "+" : ""}${fmt(gL, 1)} % sur tout l'historique.` });
-        }
-      }
+    if (Math.abs(m.drift) >= ZD) {
+      const what = m.drift < 0 ? "sous" : "au-dessus de";
+      const trend = m.b > 0 ? (m.drift < 0 ? "sa tendance s'aplatit ou baisse" : "sa tendance s'accélère") : (m.drift < 0 ? "sa baisse s'accélère" : "sa baisse ralentit");
+      list.push({ level: "forte", kind: "derive", blockBuy: false,
+        message: `${p} dérive ${what} son modèle depuis ${DRIFT_TICKS} ticks (≈ 7 jours) : écart moyen de ${m.drift >= 0 ? "+" : ""}${fmt(m.drift, 1)} × le bruit habituel. Probablement ${trend} : le modèle (sur tout l'historique) ne suit plus.` });
     }
     out[p] = list;
   }
   return (alertCache = out);
 }
+
 // Phase du cycle au tick t0 : montant / descendant, ticks avant le prochain sommet / creux
 function nextTurn(m, t0) {
   const TAU = 2 * Math.PI, ph = ((m.w * t0 + m.phi) % TAU + TAU) % TAU;
@@ -675,8 +663,8 @@ function renderDecision() {
     </tr>`);
     // Grande jauge : de la ligne des creux (gauche) à la ligne des sommets (droite), au prochain tick
     const low = z.tr * (1 - m.k), high = z.tr * (1 + m.k), pct = v => Math.min(100, Math.max(0, (v - low) / (high - low) * 100));
-    // flèche : du cours actuel vers le cours prévu au prochain tick (la prévision part du dernier cours réel)
-    const pB = pct(z.buyAt), pS = pct(z.sellAt), pNow = pct(H[lastT][p]), pPr = pct(pr), pFrom = pNow, right = pPr >= pNow;
+    // flèche : du modèle au tick actuel vers le prévu au prochain tick (sens du cycle) ; point gris = cours réel actuel
+    const pB = pct(z.buyAt), pS = pct(z.sellAt), pNow = pct(H[lastT][p]), pPr = pct(pr), pFrom = pct(m.f(lastT)), right = turn.rising;
     const L = v => `${v.toFixed(2)}%`;
     const anchor = v => v > 80 ? "transform:translateX(-100%)" : v < 20 ? "transform:none" : ""; // texte vers l'intérieur près des bords
     gauges.push(`<div class="cyc">
@@ -718,7 +706,7 @@ function renderMarket() {
   for (const p of ps) {
     const m = models[p], c = col(p), obs = [], fut = [];
     for (let t = from; t < N; t++) obs.push({ x: X(t), y: H[t][p] });
-    if (m) for (let t = lastT; t <= lastT + hor; t++) fut.push({ x: X(t), y: t === lastT ? H[t][p] : m.fa(t) });
+    if (m) for (let t = lastT; t <= lastT + hor; t++) fut.push({ x: X(t), y: m.fa(t) });
     ds.push(line(p + " observé", obs, c), line(p + " prévu", fut, c, { borderDash: [5, 4] }));
     if (m) { // droite de tendance de chaque courbe
       const trend = [];
@@ -781,6 +769,16 @@ function renderPortfolio() {
   const fut = simulateJoint(ps, first, lastT, startMoney(), startUnits(ps), L).total.map(d => ({ x: X(lastT) + d.x, y: d.y }));
   fut[0].y = real;
   const end = fut.at(-1).y, pct = (end - real) / real * 100;
+  // Gros chiffre en haut de page : valeur actuelle et gain depuis le dernier tick / les 10 derniers ticks
+  const vals = past.map(d => d.y), chg = (k, label) => {
+    if (vals.length <= k) return "";
+    const d = real - vals[vals.length - 1 - k], pc = d / vals[vals.length - 1 - k] * 100, c = d >= 0 ? "up" : "down";
+    return `<span class="${c}">${d >= 0 ? "▲ +" : "▼ "}${fmt(d, 0)} (${pc >= 0 ? "+" : ""}${fmt(pc, 1)} %)</span> <span class="muted">${label}</span>`;
+  };
+  document.getElementById("k-val").textContent = fmt(real, 0);
+  document.getElementById("k-val-1").innerHTML = chg(1, "depuis le dernier tick");
+  document.getElementById("k-val-10").innerHTML = chg(10, "sur les 10 derniers ticks");
+  document.getElementById("k-val-d").textContent = `dont ${fmt(startMoney(), 0)} d'argent liquide`;
   document.getElementById("pf-sum").innerHTML =
     `Valeur actuelle <b>${fmt(real, 0)}</b> (argent ${fmt(startMoney(), 0)}) → prévue dans ${L} ticks (≈ ${ticksToDuration(L)}) : <b class="${end >= real ? "up" : "down"}">${fmt(end, 0)} (${pct >= 0 ? "+" : ""}${fmt(pct, 1)} %)</b>`
     + (ok ? "" : ` · <span class="muted">historique reconstitué incomplet (log des décisions indisponible ou en retard)</span>`);
