@@ -1,6 +1,6 @@
 {
   "description": "Décision appliquée par le marché à chaque tick : la dernière version de decision.json publiée sur GitHub avant l'heure du tick. Valeurs dans [-1, 1] : +1 = acheter 100 u, -1 = vendre 100 u, 0 = rien.",
-  "generated_at": "2026-11-26T15:35:00Z",
+  "generated_at": "2026-11-27T13:36:50Z",
   "ticks": [
     {
       "tick": 349,
@@ -577,16 +577,48 @@
       },
       "decision_published_at": "2026-11-26T05:17:48Z",
       "decision_commit": "582b3b9"
+    },
+    {
+      "tick": 385,
+      "tick_time": "2026-11-26T22:44:14Z",
+      "decision": {
+        "A": 1.0,
+        "B": -1.0,
+        "C": -1.0
+      },
+      "prices": {
+        "A": 5.1069,
+        "B": 12.703,
+        "C": 1.0977
+      },
+      "decision_published_at": "2026-11-26T15:46:13Z",
+      "decision_commit": "ff27ffc"
+    },
+    {
+      "tick": 386,
+      "tick_time": "2026-11-27T04:41:52Z",
+      "decision": {
+        "A": 0.0,
+        "B": -1.0,
+        "C": 0.0
+      },
+      "prices": {
+        "A": 5.1529,
+        "B": 12.497,
+        "C": 1.0263
+      },
+      "decision_published_at": "2026-11-27T00:37:25Z",
+      "decision_commit": "7f4b1dd"
     }
   ],
   "pending": {
-    "tick": 385,
+    "tick": 387,
     "decision": {
-      "A": 1.0,
+      "A": 0.0,
       "B": -1.0,
-      "C": -1.0
+      "C": 0.0
     },
-    "decision_published_at": "2026-11-26T15:26:17Z",
-    "decision_commit": "38ac56f"
+    "decision_published_at": "2026-11-27T13:36:48Z",
+    "decision_commit": "459c820"
   }
 }
