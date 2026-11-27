@@ -88,8 +88,8 @@ def fetch_feeds():
 
 
 # ---------------------------------------------------------------- modèle
-HALF_LIFE = 96    # forme des cycles : poids d'un tick divisé par 2 tous les 96 ticks (≈ 1 cycle de B, ≈ 27 jours)
-RECENT_HALF_LIFE = 1   # la prévision part de l'écart récent au modèle (≈ dernier tick), qui s'estompe ensuite
+HALF_LIFE = 96    # poids d'un tick divisé par 2 tous les 96 ticks (≈ 1 cycle de B, ≈ 27 jours) : les événements
+                  # récents comptent plus, mais la prévision reste la courbe du modèle (elle ne part pas du dernier point)
 # Alerte : moyenne des écarts au modèle sur TOUT l'historique, chaque tick pesant deux fois moins tous les
 # ALERT_HALF_LIFE ticks dans le passé (les événements récents comptent beaucoup plus), en « bruits habituels ».
 # Seuil calibré sur l'historique (calibrate_alert dans les commentaires du commit) : le pire tick passé est à 0,8.
@@ -139,19 +139,10 @@ class Model:
         self.alert_score = float((wa * rel).sum() / wa.sum() / self.noise)       # en bruits habituels
         self.alert_level = self.alert_score / ALERT_THRESHOLD                     # distance au déclenchement (±1)
 
-        # Écart récent au modèle (dernier tick surtout) et sa mémoire d'un tick au suivant (≈ 0,5 : dans le marché,
-        # chaque prix garde la moitié du précédent). La prévision part de cet écart, qui s'estompe tick après tick.
-        wr = 0.5 ** ((n - 1 - t) / RECENT_HALF_LIFE)
-        self.last = n - 1
-        self.recent_dev = float((wr * rel).sum() / wr.sum())
-        kk = min(192, n - 1)
-        self.rho = max(0.0, float(np.corrcoef(rel[-kk - 1:-1], rel[-kk:])[0, 1])) if kk > 2 else 0.0
-
     def fa(self, t):
-        """Prévision utilisée pour décider : modèle × (1 + écart récent × rho^h), h = ticks après le dernier."""
-        t = np.asarray(t, dtype=float)
-        h = np.maximum(t - self.last, 0)
-        return np.maximum(self.f(t) * (1 + self.recent_dev * self.rho ** h), 0.01)
+        """Prévision utilisée pour décider : la courbe du modèle. Elle ne part pas du dernier cours observé : si celui-ci
+        est anormalement haut ou bas, la prévision corrige la trajectoire au lieu de le suivre."""
+        return self.f(t)
 
     def trend(self, t):
         return np.maximum(self.a + self.b * np.asarray(t, dtype=float), 0)
@@ -494,7 +485,7 @@ def main():
         "alerts": st["alerts"],
         "expected_value": round(value, 2),
         "expected_value_fixed_thresholds": round(fixed_value, 2),
-        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi, "noise": m.noise, "alert_score": m.alert_score, "alert_level": m.alert_level, "recent_dev": m.recent_dev, "rho": m.rho} for p, m in models.items()},
+        "models": {p: {"period": m.P, "level": m.a, "drift": m.b, "amplitude": m.k, "phase": m.phi, "noise": m.noise, "alert_score": m.alert_score, "alert_level": m.alert_level, } for p, m in models.items()},
         "compute_seconds": round(time.time() - started, 1),
     }
     os.makedirs(os.path.dirname(STRATEGY_FILE), exist_ok=True)

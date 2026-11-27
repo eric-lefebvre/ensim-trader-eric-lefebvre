@@ -290,8 +290,7 @@ function fitFixedPeriod(y, P, wt) {
 // P est trouvé par balayage ; niveau, dérive, k et φ par moindres carrés alternés.
 // Les événements récents comptent plus : poids d'un tick divisé par 2 tous les HALF_LIFE ticks dans le passé
 // (halfLife = null : tous les ticks pareils). Même calcul que Model dans scripts/algorithm.py.
-const HALF_LIFE = 96;       // forme des cycles (≈ 1 cycle de B), comme HALF_LIFE dans scripts/algorithm.py
-const RECENT_HALF_LIFE = 1;  // la prévision part de l'écart récent au modèle, comme RECENT_HALF_LIFE
+const HALF_LIFE = 96;  // événements récents plus importants (≈ 1 cycle de B), comme HALF_LIFE dans scripts/algorithm.py
 // Alerte (comme ALERT_HALF_LIFE / ALERT_THRESHOLD dans scripts/algorithm.py) : moyenne pondérée des écarts au modèle
 // sur tout l'historique, les récents pesant beaucoup plus ; seuil calibré pour que le pire tick passé soit à 0,8.
 const ALERT_HALF_LIFE = 8, ALERT_THRESHOLD = 0.79;
@@ -338,17 +337,7 @@ function fitModel(y, halfLife = HALF_LIFE) {
   for (let t = 0; t < n; t++) { const q = Math.pow(0.5, (n - 1 - t) / ALERT_HALF_LIFE); aw += q; ar += q * rel[t]; }
   m.alertScore = ar / aw / m.noise;            // en bruits habituels
   m.alertLevel = m.alertScore / ALERT_THRESHOLD; // distance au déclenchement (±1)
-  // Écart récent au modèle (dernier tick surtout) et sa mémoire d'un tick au suivant (≈ 0,5 dans le marché) :
-  // la prévision part de cet écart, qui s'estompe tick après tick (même calcul que Model.fa en Python).
-  let sw = 0, sr = 0;
-  for (let t = 0; t < n; t++) { const q = Math.pow(0.5, (n - 1 - t) / RECENT_HALF_LIFE); sw += q; sr += q * rel[t]; }
-  m.recentDev = sr / sw;
-  const kk = Math.min(192, n - 1), xs = rel.slice(-kk - 1, -1), ys = rel.slice(-kk);
-  const mx = xs.reduce((a2, v) => a2 + v, 0) / kk, my = ys.reduce((a2, v) => a2 + v, 0) / kk;
-  let cxy = 0, cxx = 0, cyy = 0;
-  for (let i = 0; i < kk; i++) { cxy += (xs[i] - mx) * (ys[i] - my); cxx += (xs[i] - mx) ** 2; cyy += (ys[i] - my) ** 2; }
-  m.rho = kk > 2 ? Math.max(0, cxy / Math.sqrt(cxx * cyy)) : 0;
-  m.fa = t => Math.max(m.f(t) * (1 + m.recentDev * Math.pow(m.rho, Math.max(t - (n - 1), 0))), 0.01);
+  m.fa = t => m.f(t); // prévision = courbe du modèle (ne part pas du dernier cours observé), comme Model.fa en Python
   return m;
 }
 // Alerte par produit (mêmes règles que detect_alerts dans scripts/algorithm.py), quand |score| >= ALERT_THRESHOLD :
@@ -729,7 +718,7 @@ function renderMarket() {
   for (const p of ps) {
     const m = models[p], c = col(p), obs = [], fut = [];
     for (let t = from; t < N; t++) obs.push({ x: X(t), y: H[t][p] });
-    if (m) for (let t = lastT; t <= lastT + hor; t++) fut.push({ x: X(t), y: t === lastT ? H[t][p] : m.fa(t) });
+    if (m) for (let t = lastT; t <= lastT + hor; t++) fut.push({ x: X(t), y: m.fa(t) }); // courbe du modèle, pas le dernier point
     ds.push(line(p + " observé", obs, c), line(p + " prévu", fut, c, { borderDash: [5, 4] }));
     if (m) { // droite de tendance de chaque courbe
       const trend = [];

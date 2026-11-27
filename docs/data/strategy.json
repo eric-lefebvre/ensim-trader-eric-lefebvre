@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-27T15:27:57Z",
+  "generated_at": "2026-11-27T15:34:05Z",
   "tick": 387,
   "market_generated_at": "2026-11-27T14:34:35Z",
   "market_commit": "02db61f5dfbdfde3b835a2366a7b19be63f3b164",
@@ -9,14 +9,14 @@
     {
       "A": {
         "buy": 0.75,
-        "sell": 0.75
+        "sell": 0.8
       },
       "B": {
         "buy": 0.15,
         "sell": 0.15
       },
       "C": {
-        "buy": 0.65,
+        "buy": 0.45,
         "sell": 0.9
       }
     },
@@ -60,17 +60,17 @@
     "C": 1.0
   },
   "reasons": {
-    "A": "cours pr\u00e9vu 5.323 >= seuil de vente 5.160",
-    "B": "cours pr\u00e9vu 12.804 >= seuil de vente 12.774",
-    "C": "cours pr\u00e9vu 0.909 <= seuil d'achat 0.973"
+    "A": "cours pr\u00e9vu 5.296 >= seuil de vente 5.125",
+    "B": "cours pr\u00e9vu 12.936 >= seuil de vente 12.774",
+    "C": "cours pr\u00e9vu 0.907 <= seuil d'achat 0.924"
   },
   "alerts": {
     "A": [],
     "B": [],
     "C": []
   },
-  "expected_value": 50957.78,
-  "expected_value_fixed_thresholds": 50529.0,
+  "expected_value": 50982.12,
+  "expected_value_fixed_thresholds": 50567.46,
   "models": {
     "A": {
       "period": 47.75,
@@ -80,9 +80,7 @@
       "phase": -0.19982084696441046,
       "noise": 0.015589945877846036,
       "alert_score": 0.32973653552115023,
-      "alert_level": 0.4173880196470256,
-      "recent_dev": 0.01070554207170821,
-      "rho": 0.4760334719437076
+      "alert_level": 0.4173880196470256
     },
     "B": {
       "period": 96.0,
@@ -92,9 +90,7 @@
       "phase": 1.4630142336989669,
       "noise": 0.014798345601542995,
       "alert_score": -0.6266360222730731,
-      "alert_level": -0.793210154776042,
-      "recent_dev": -0.01994382074123047,
-      "rho": 0.5113988998210742
+      "alert_level": -0.793210154776042
     },
     "C": {
       "period": 24.0,
@@ -104,10 +100,8 @@
       "phase": 3.02561939987684,
       "noise": 0.015203832613531637,
       "alert_score": 0.08025987073608719,
-      "alert_level": 0.10159477308365467,
-      "recent_dev": 0.005182324403349717,
-      "rho": 0.5210255191242228
+      "alert_level": 0.10159477308365467
     }
   },
-  "compute_seconds": 5.4
+  "compute_seconds": 5.5
 }
