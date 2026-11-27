@@ -1,19 +1,19 @@
 {
-  "generated_at": "2026-11-26T15:43:50Z",
-  "tick": 384,
-  "market_generated_at": "2026-11-26T13:46:31Z",
-  "market_commit": "e6a0664ff6bd660dcc95178e11594c1cfa56db19",
+  "generated_at": "2026-11-27T00:37:24Z",
+  "tick": 385,
+  "market_generated_at": "2026-11-26T22:44:14Z",
+  "market_commit": "e4eb4fb3398477f1b6ff77938d88e0cdc9151532",
   "block_ticks": 96,
   "blocks": 5,
   "plan": [
     {
       "A": {
-        "buy": 1.0,
+        "buy": 0.85,
         "sell": 0.7
       },
       "B": {
-        "buy": 0.65,
-        "sell": 0.75
+        "buy": 0.5,
+        "sell": 0.7
       },
       "C": {
         "buy": 0.4,
@@ -37,11 +37,11 @@
     {
       "A": {
         "buy": 0.85,
-        "sell": 0.95
+        "sell": 0.85
       },
       "B": {
         "buy": 0.5,
-        "sell": 0.6
+        "sell": 0.55
       },
       "C": {
         "buy": 0.4,
@@ -50,12 +50,12 @@
     },
     {
       "A": {
-        "buy": 1.0,
-        "sell": 1.0
+        "buy": 0.85,
+        "sell": 0.85
       },
       "B": {
         "buy": 0.75,
-        "sell": 0.75
+        "sell": 0.8
       },
       "C": {
         "buy": 0.4,
@@ -64,8 +64,8 @@
     },
     {
       "A": {
-        "buy": 1.0,
-        "sell": 1.0
+        "buy": 0.85,
+        "sell": 0.85
       },
       "B": {
         "buy": 1.0,
@@ -78,44 +78,44 @@
     }
   ],
   "signal_raw": {
-    "A": 1.0,
+    "A": 0.0,
     "B": -1.0,
-    "C": -1.0
+    "C": 0.0
   },
   "decision": {
-    "A": 1.0,
+    "A": 0.0,
     "B": -1.0,
-    "C": -1.0
+    "C": 0.0
   },
   "reasons": {
-    "A": "cours pr\u00e9vu 4.949 <= seuil d'achat 4.976",
-    "B": "cours pr\u00e9vu 12.993 >= seuil de vente 12.122",
-    "C": "cours pr\u00e9vu 1.103 >= seuil de vente 1.098"
+    "A": "cours pr\u00e9vu 5.046 entre 4.870 et 5.194",
+    "B": "cours pr\u00e9vu 13.005 >= seuil de vente 12.187",
+    "C": "cours pr\u00e9vu 1.034 entre 0.921 et 1.093"
   },
-  "expected_value": 84469.42,
-  "expected_value_fixed_thresholds": 82218.96,
+  "expected_value": 84768.91,
+  "expected_value_fixed_thresholds": 82506.7,
   "models": {
     "A": {
       "period": 48.0,
-      "level": 5.025864148548409,
-      "drift": -0.00012872899401364973,
-      "amplitude": 0.14455057083824044,
-      "phase": -0.03786288686577733
+      "level": 5.025050867983311,
+      "drift": -0.00012233532965549577,
+      "amplitude": 0.14455246387401458,
+      "phase": -0.03672365676589338
     },
     "B": {
       "period": 96.0,
-      "level": 7.985308393066277,
-      "drift": 0.010008696167805779,
-      "amplitude": 0.09903787987967133,
-      "phase": 1.4607914840009073
+      "level": 7.987047178050834,
+      "drift": 0.009995637246430406,
+      "amplitude": 0.09891161885592631,
+      "phase": 1.46105365040064
     },
     "C": {
       "period": 24.0,
-      "level": 3.0013840223449586,
-      "drift": -0.00502135472370726,
-      "amplitude": 0.2300230425733926,
-      "phase": 3.018818406605599
+      "level": 3.001413939033918,
+      "drift": -0.005021585758957184,
+      "amplitude": 0.23002364261451635,
+      "phase": 3.018937371691245
     }
   },
-  "compute_seconds": 1.4
+  "compute_seconds": 0.9
 }
