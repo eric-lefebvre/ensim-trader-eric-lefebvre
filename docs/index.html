@@ -136,7 +136,6 @@ th { color: var(--text-secondary); font-weight: 500; }
 .alert { border-radius: 10px; padding: 14px 18px; font-size: 16px; line-height: 1.4; border: 2px solid; }
 .alert b { font-size: 18px; }
 .alert.forte { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 18%, var(--surface-1)); }
-.alert.prudent { border-color: #c98500; background: color-mix(in srgb, #c98500 15%, var(--surface-1)); }
 .alert.info { border-color: #2a78d6; background: color-mix(in srgb, #2a78d6 15%, var(--surface-1)); }
 .nowrap { white-space: nowrap; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 16px; }
@@ -172,6 +171,21 @@ th { color: var(--text-secondary); font-weight: 500; }
   <section class="card">
     <h2>Décision actuelle (prochain tick)</h2>
     <div class="decision" id="decision"><span class="muted">Calcul en cours…</span></div>
+    <button id="man-open">Modifier la décision à la main</button>
+    <div id="man-form" hidden style="margin-top:12px">
+      <div class="controls" style="margin:0 0 8px">
+        <label>A <input id="man-A" type="number" min="-1" max="1" step="0.05" style="width:80px"></label>
+        <label>B <input id="man-B" type="number" min="-1" max="1" step="0.05" style="width:80px"></label>
+        <label>C <input id="man-C" type="number" min="-1" max="1" step="0.05" style="width:80px"></label>
+        <label>Jeton GitHub <input id="man-token" type="password" autocomplete="off" placeholder="github_pat_…" style="width:220px"></label>
+        <button id="man-send">Publier dans decision.json</button>
+      </div>
+      <p class="muted" style="margin:0">Valeurs entre −1 (vendre 100 u) et +1 (acheter 100 u). Le marché lit decision.json au prochain tick.
+        La décision manuelle reste en place jusqu'au prochain recalcul automatique du workflow, c'est-à-dire après le prochain tick.
+        Jeton : GitHub → Settings → Developer settings → Fine-grained tokens, accès au seul dépôt ensim-trader-eric-lefebvre,
+        permission « Contents : Read and write ». Il est gardé uniquement dans ce navigateur.</p>
+      <p id="man-res" style="margin:6px 0 0"></p>
+    </div>
   </section>
 
   <!-- Seuils et position dans le cycle -->
@@ -295,9 +309,15 @@ const HALF_LIFE = 96;  // événements récents plus importants (≈ 1 cycle de 
 // Alerte (comme ALERT_HALF_LIFE / ALERT_THRESHOLD dans scripts/algorithm.py) : moyenne pondérée des écarts au modèle
 // sur tout l'historique, les récents pesant beaucoup plus ; seuil calibré pour que le pire tick passé soit à 0,8.
 const ALERT_HALF_LIFE = 8, ALERT_THRESHOLD = 0.79;
-// Mode prudent (comme PRUDENT_* en Python) : >= 8 des 10 derniers ticks sous la prévision et écart moyen >= 1 bruit
-// -> baisse réelle : prévision abaissée du niveau de la baisse, achats coupés, zone de vente avancée de 25 points.
-const PRUDENT_TICKS = 10, PRUDENT_MIN_SAME = 8, PRUDENT_Z = 1.0, PRUDENT_SELL_BONUS = 0.25;
+// Ajustement progressif de la stratégie selon la dérive g (±1 = alerte), même règle que adjust() en Python :
+// [multiplicateur des achats, points ajoutés au seuil d'achat, points ajoutés au seuil de vente]
+function adjust(g) {
+  const a = Math.abs(g);
+  if (g >= 0) return [1, g <= 0.8 ? 0.125 * g : Math.max(0, 0.10 * (1 - g) / 0.2), 0]; // se porte bien : achats un peu plus larges, pas au pic
+  if (a <= 0.8) return [1 - 0.125 * a, 0, 0.0625 * a];                              // plage déjà vue : effet doux
+  if (a < 1) return [0.90 * (1 - a) / 0.2, 0, 0.05 + 0.05 * (a - 0.8) / 0.2];        // jamais vu : achats en forte baisse
+  return [0, 0, 0.10];                                                                // alerte : plus d'achat
+}
 function fitModel(y, halfLife = HALF_LIFE) {
   const n = y.length;
   if (n < 12) return null;
@@ -341,13 +361,10 @@ function fitModel(y, halfLife = HALF_LIFE) {
   for (let t = 0; t < n; t++) { const q = Math.pow(0.5, (n - 1 - t) / ALERT_HALF_LIFE); aw += q; ar += q * rel[t]; }
   m.alertScore = ar / aw / m.noise;            // en bruits habituels
   m.alertLevel = m.alertScore / ALERT_THRESHOLD; // distance au déclenchement (±1)
-  // Baisse réelle ou bruit ? Écarts des 10 derniers ticks à la prévision (comme Model en Python)
-  const lastRel = rel.slice(-PRUDENT_TICKS), meanRel = lastRel.reduce((a2, v) => a2 + v, 0) / lastRel.length;
-  m.persistZ = meanRel / m.noise;
-  m.persistBelow = lastRel.filter(v => v < 0).length;
-  m.prudent = m.persistBelow >= PRUDENT_MIN_SAME && m.persistZ <= -PRUDENT_Z;
-  m.shift = m.prudent ? meanRel : 0;
-  // prévision = courbe du modèle, sans partir du dernier cours ; en mode prudent, abaissée du niveau de la baisse
+  // Dérive (±1 = alerte) et prévision qui la suit progressivement (poids |dérive|², plafonné à 1), comme Model en Python
+  m.g = m.alertLevel;
+  m.shift = m.alertScore * m.noise * Math.pow(Math.min(1, Math.abs(m.g)), 2);
+  // prévision = courbe du modèle, décalée d'une part de la dérive récente (un point isolé ne la déplace pas)
   m.fa = t => Math.max(m.f(t) * (1 + m.shift), 0.01);
   return m;
 }
@@ -365,9 +382,6 @@ function detectAlerts() {
     else if (m.alertLevel >= 1)
       list.push({ level: "info", kind: "pic", blockBuy: false,
         message: `Pic sur ${p} : le cours est nettement au-dessus de son modèle (score +${fmt(m.alertScore, 2)} bruit, seuil +${fmt(ALERT_THRESHOLD, 2)}). Information seulement : la stratégie continue normalement, aucun achat n'est déclenché par l'alerte.` });
-    if (m.prudent)
-      list.push({ level: "prudent", kind: "prudent", blockBuy: true,
-        message: `Mode prudent sur ${p} : ${m.persistBelow}/${PRUDENT_TICKS} derniers ticks sous la prévision, écart moyen ${m.shift >= 0 ? "+" : ""}${fmt(m.shift * 100, 1)} % (${fmt(m.persistZ, 1)} bruit) : ce n'est plus du bruit mais une baisse réelle. Prévision abaissée d'autant, achats de ${p} coupés, zone de vente avancée de ${Math.round(PRUDENT_SELL_BONUS * 100)} points.` });
     out[p] = list;
   }
   return (alertCache = out);
@@ -380,6 +394,14 @@ function alertGauge(m) {
   const left = v < 0 ? 50 + v * 50 : 50, width = Math.abs(v) * 50;
   return `<span class="ag"><i style="left:${left}%;width:${width}%;background:${color}"></i><b></b></span>`
     + `<b style="color:${color}">${pc > 0 ? "+" : ""}${pc} %</b>`;
+}
+// Texte de l'ajustement progressif appliqué à un produit
+function adjText([mult, bB, sB]) {
+  const parts = [];
+  if (mult < 0.999) parts.push(`<span class="down">achats ${mult === 0 ? "coupés" : `−${Math.round((1 - mult) * 100)} %`}</span>`);
+  if (bB > 0.001) parts.push(`<span class="up">zone d'achat +${Math.round(bB * 100)} pts</span>`);
+  if (sB > 0.001) parts.push(`<span class="down">vente avancée +${Math.round(sB * 100)} pts</span>`);
+  return parts.join(" · ") || `<span class="muted">aucun</span>`;
 }
 // Phase du cycle au tick t0 : montant / descendant, ticks avant le prochain sommet / creux
 function nextTurn(m, t0) {
@@ -650,20 +672,24 @@ function renderDecision() {
   const H = market.history, lastT = H.length - 1, ps = productsOk(), t0 = H[0].t;
   const th = readThresholds(ps);
   let money = startMoney();
-  const units = startUnits(ps), dec = {}, rows = [], gauges = [];
-  const alerts = detectAlerts(), blocked = new Set(ps.filter(p => alerts[p].some(a => a.blockBuy) || models[p].prudent));
+  const units = startUnits(ps), dec = {}, rows = [], gauges = [], adj = {};
+  const alerts = detectAlerts(), blocked = new Set(ps.filter(p => alerts[p].some(a => a.blockBuy)));
   const all = ps.flatMap(p => alerts[p]);
   document.getElementById("alerts").innerHTML = all.map(a =>
-    `<div class="alert ${a.level}"><b>${a.level === "forte" ? "⚠ ALERTE BAISSE" : a.level === "prudent" ? "↘ MODE PRUDENT" : "▲ PIC"}</b> — ${a.message}</div>`).join("");
+    `<div class="alert ${a.level}"><b>${a.level === "forte" ? "⚠ ALERTE BAISSE" : "▲ PIC"}</b> — ${a.message}</div>`).join("");
   for (const p of ps) { // même calcul que le 1er tick de la simulation (argent partagé, ordre A, B, C)
-    // mode prudent : zone de vente avancée (le seuil affiché dans le tableau et la jauge est celui réellement appliqué)
-    if (models[p].prudent) th[p] = { b: th[p].b, s: Math.min(1, th[p].s + PRUDENT_SELL_BONUS) };
+    // ajustement progressif selon la dérive (les seuils affichés dans le tableau et la jauge sont ceux réellement appliqués)
+    const [mult, bB, sB] = adjust(models[p].g);
+    let nb2 = Math.min(1, th[p].b + bB), ns2 = Math.min(1, th[p].s + sB);
+    if (SELL_LE_BUY.has(p)) ns2 = Math.min(ns2, nb2);
+    adj[p] = [mult, nb2 - th[p].b, ns2 - th[p].s]; // ajustement réellement appliqué (après plafonds)
+    th[p] = { b: nb2, s: ns2 };
     const m = models[p], pr = m.fa(lastT + 1), z = zones(m, lastT + 1, th[p]), moneyBefore = money;
     let q = 0, reason;
     if (z.tr > 0 && pr <= z.buyAt && blocked.has(p)) {
       reason = `Zone d'achat, mais alerte de baisse → achats coupés.`;
     } else if (z.tr > 0 && pr <= z.buyAt) {
-      q = Math.min(100, Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q;
+      q = Math.min(100 * adj[p][0], Math.max(0, (money - MIN_MONEY_RESERVE) / pr)); money -= q * pr; units[p] += q;
       reason = q >= 99.95 ? `Cours prévu ${fmt(pr, 3)} ≤ seuil d'achat ${fmt(z.buyAt, 3)} → <b>acheter 100 u</b>.`
         : q > 0.05 ? `Cours prévu ${fmt(pr, 3)} ≤ seuil d'achat ${fmt(z.buyAt, 3)}, mais il ne reste que ${fmt(moneyBefore, 0)} d'argent → <b>acheter ${fmt(q, 0)} u seulement</b>.`
         : `Zone d'achat, mais plus d'argent disponible → rien.`;
@@ -684,6 +710,7 @@ function renderDecision() {
       <td class="nowrap">${turn.rising ? `sommet dans ${fmt(turn.toPeak, 0)} t` : `creux dans ${fmt(turn.toTrough, 0)} t`}</td>
       <td class="nowrap">${fmt(startUnits([p])[p], 0)} u</td>
       <td class="nowrap">${alertGauge(m)}</td>
+      <td class="nowrap">${adjText(adj[p])}</td>
     </tr>`);
     // Grande jauge : de la ligne des creux (gauche) à la ligne des sommets (droite), au prochain tick
     const low = z.tr * (1 - m.k), high = z.tr * (1 + m.k), pct = v => Math.min(100, Math.max(0, (v - low) / (high - low) * 100));
@@ -712,6 +739,7 @@ function renderDecision() {
       <div class="end">sommet<b>${fmt(high, 3)}</b></div>
     </div>`);
   }
+  lastDecision = { ...dec };
   document.getElementById("decision").innerHTML = ps.map(p => {
     const v = dec[p], cls = v > 0 ? "up" : v < 0 ? "down" : "";
     const act = v > 0 ? `Acheter ${fmt(v * 100, 0)} u` : v < 0 ? `Vendre ${fmt(-v * 100, 0)} u` : "Ne rien faire";
@@ -719,7 +747,7 @@ function renderDecision() {
       <div><div class="v ${cls}">${fmtSig(v)}</div><div class="a">${act}</div></div></div>`;
   }).join("");
   document.getElementById("justif").innerHTML =
-    `<tr><th>Produit</th><th>Cours actuel</th><th>Seuils achat / vente</th><th>Prochain retournement</th><th>Stock</th><th>Dérive par rapport à la prévision<br><span class="muted">±100 % = alerte</span></th></tr>`
+    `<tr><th>Produit</th><th>Cours actuel</th><th>Seuils achat / vente</th><th>Prochain retournement</th><th>Stock</th><th>Dérive par rapport à la prévision<br><span class="muted">±100 % = alerte</span></th><th>Ajustement de la stratégie</th></tr>`
     + rows.join("");
   document.getElementById("cycles").innerHTML = gauges.join("");
 }
@@ -990,6 +1018,51 @@ function renderNextTick() {
   set("k-dec-d", pub ? `le ${day(pub)}` + (pub < last ? ` · <span class="down">avant le dernier tick</span>` : "") : "decision.json non lisible");
 }
 setInterval(renderNextTick, 60000);
+/* ---------- Décision manuelle : écrit decision.json dans le dépôt via l'API GitHub ---------- */
+const REPO = "eric-lefebvre/ensim-trader-eric-lefebvre";
+let lastDecision = null;
+const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+                set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
+document.getElementById("man-open").addEventListener("click", () => {
+  const f = document.getElementById("man-form");
+  f.hidden = !f.hidden;
+  if (!f.hidden) {
+    for (const p of ["A", "B", "C"]) document.getElementById("man-" + p).value = lastDecision ? lastDecision[p] : 0;
+    document.getElementById("man-token").value = store.get("gh_token") || "";
+  }
+});
+document.getElementById("man-send").addEventListener("click", async () => {
+  const res = document.getElementById("man-res"), token = document.getElementById("man-token").value.trim();
+  if (!token) { res.innerHTML = `<span class="down">Il faut un jeton GitHub pour publier.</span>`; return; }
+  const dec = {};
+  for (const p of ["A", "B", "C"]) {
+    const v = +document.getElementById("man-" + p).value;
+    if (!Number.isFinite(v)) { res.innerHTML = `<span class="down">Valeur invalide pour ${p}.</span>`; return; }
+    dec[p] = Math.round(Math.max(-1, Math.min(1, v)) * 1000) / 1000;
+  }
+  dec.updated_at = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+  dec.source = "manuel (dashboard)";
+  const headers = { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" };
+  res.textContent = "Publication…";
+  try {
+    const cur = await fetch(`https://api.github.com/repos/${REPO}/contents/decision.json?ref=main`, { headers });
+    if (!cur.ok) throw new Error(`lecture impossible (${cur.status})`);
+    const sha = (await cur.json()).sha;
+    const put = await fetch(`https://api.github.com/repos/${REPO}/contents/decision.json`, {
+      method: "PUT", headers,
+      body: JSON.stringify({ message: `Décision manuelle (dashboard) : A ${dec.A}, B ${dec.B}, C ${dec.C}`, branch: "main", sha,
+                             content: btoa(JSON.stringify(dec, null, 2) + "\n") }),
+    });
+    if (!put.ok) throw new Error(`écriture refusée (${put.status})`);
+    const out = await put.json();
+    store.set("gh_token", token);
+    published = dec;
+    renderNextTick();
+    res.innerHTML = `<span class="up">Publié : A ${fmtSig(dec.A)} · B ${fmtSig(dec.B)} · C ${fmtSig(dec.C)}</span> — <a href="${out.commit.html_url}" target="_blank" rel="noopener">voir le commit</a>`;
+  } catch (e) {
+    res.innerHTML = `<span class="down">Échec : ${e.message}. Vérifie le jeton (accès au dépôt, permission Contents en écriture).</span>`;
+  }
+});
 const renderAll = () => { if (!market) return; renderDecision(); renderMarket(); renderPortfolio(); renderSim(); };
 for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => {
   for (const x of document.querySelectorAll(".tabs button")) x.setAttribute("aria-selected", x === b ? "true" : "false");

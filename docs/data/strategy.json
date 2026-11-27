@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-27T19:10:30Z",
+  "generated_at": "2026-11-27T19:32:00Z",
   "tick": 387,
   "market_generated_at": "2026-11-27T14:34:35Z",
   "market_commit": "02db61f5dfbdfde3b835a2366a7b19be63f3b164",
@@ -8,12 +8,12 @@
   "plan": [
     {
       "A": {
-        "buy": 1.0,
-        "sell": 0.65
+        "buy": 0.85,
+        "sell": 0.85
       },
       "B": {
-        "buy": 0.6,
-        "sell": 0.6
+        "buy": 0.2,
+        "sell": 0.2
       },
       "C": {
         "buy": 0.45,
@@ -23,11 +23,11 @@
     {
       "A": {
         "buy": 0.95,
-        "sell": 0.85
+        "sell": 0.95
       },
       "B": {
-        "buy": 0.6,
-        "sell": 0.6
+        "buy": 0.35,
+        "sell": 0.35
       },
       "C": {
         "buy": 0.45,
@@ -37,11 +37,11 @@
     {
       "A": {
         "buy": 0.9,
-        "sell": 0.95
+        "sell": 0.85
       },
       "B": {
-        "buy": 0.6,
-        "sell": 0.6
+        "buy": 0.65,
+        "sell": 0.65
       },
       "C": {
         "buy": 0.0,
@@ -60,24 +60,17 @@
     "C": 1.0
   },
   "reasons": {
-    "A": "cours pr\u00e9vu 5.296 >= seuil de vente 5.231",
-    "B": "cours pr\u00e9vu 12.724 >= seuil de vente 11.997",
-    "C": "cours pr\u00e9vu 0.907 <= seuil d'achat 0.924"
+    "A": "cours pr\u00e9vu 5.301 >= seuil de vente 5.090",
+    "B": "cours pr\u00e9vu 12.861 >= seuil de vente 12.718",
+    "C": "cours pr\u00e9vu 0.907 <= seuil d'achat 0.927"
   },
   "alerts": {
     "A": [],
-    "B": [
-      {
-        "level": "prudent",
-        "kind": "prudent",
-        "block_buy": true,
-        "message": "Mode prudent sur B : 10/10 derniers ticks sous la pr\u00e9vision, \u00e9cart moyen -1.6 % (-1.1 bruit) : ce n'est plus du bruit mais une baisse r\u00e9elle. Pr\u00e9vision abaiss\u00e9e d'autant, achats de B coup\u00e9s, zone de vente avanc\u00e9e de 25 points."
-      }
-    ],
+    "B": [],
     "C": []
   },
-  "expected_value": 48803.69,
-  "expected_value_fixed_thresholds": 48543.2,
+  "expected_value": 50327.56,
+  "expected_value_fixed_thresholds": 50009.04,
   "models": {
     "A": {
       "period": 47.75,
@@ -88,10 +81,13 @@
       "noise": 0.015589945877846036,
       "alert_score": 0.32973653552115023,
       "alert_level": 0.4173880196470256,
-      "prudent": false,
-      "persist_z": 0.2801246310265149,
-      "persist_below": 5,
-      "shift": 0.0
+      "g": 0.4173880196470256,
+      "shift": 0.0008955537084921007,
+      "adjust": {
+        "buy_mult": 1.0,
+        "buy_bonus": 0.0521735024558782,
+        "sell_bonus": 0.0
+      }
     },
     "B": {
       "period": 96.0,
@@ -102,10 +98,13 @@
       "noise": 0.014798345601542995,
       "alert_score": -0.6266360222730731,
       "alert_level": -0.793210154776042,
-      "prudent": true,
-      "persist_z": -1.106681573714386,
-      "persist_below": 10,
-      "shift": -0.016377056398684964
+      "g": -0.793210154776042,
+      "shift": -0.005834518931060113,
+      "adjust": {
+        "buy_mult": 0.9008487306529948,
+        "buy_bonus": 0.0,
+        "sell_bonus": 0.04957563467350262
+      }
     },
     "C": {
       "period": 24.0,
@@ -116,11 +115,14 @@
       "noise": 0.015203832613531637,
       "alert_score": 0.08025987073608719,
       "alert_level": 0.10159477308365467,
-      "prudent": false,
-      "persist_z": 0.19712247434904623,
-      "persist_below": 4,
-      "shift": 0.0
+      "g": 0.10159477308365467,
+      "shift": 1.259488669321869e-05,
+      "adjust": {
+        "buy_mult": 1.0,
+        "buy_bonus": 0.012699346635456833,
+        "sell_bonus": 0.0
+      }
     }
   },
-  "compute_seconds": 2.4
+  "compute_seconds": 2.3
 }
