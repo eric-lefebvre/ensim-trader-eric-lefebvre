@@ -750,12 +750,6 @@ function renderDecision() {
     const turn = nextTurn(m, lastT);
     rows.push(`<tr>
       <td><span class="swatch" style="background:${col(p)}"></span> <b>${p}</b></td>
-      <td class="nowrap">${fmt(H[lastT][p], 3)}</td>
-      <td class="nowrap">${fmt(z.buyAt, 3)} / ${fmt(z.sellAt, 3)}<br><span class="muted">optimisés ${Math.round(base[p].b * 100)} % / ${Math.round(base[p].s * 100)} %${
-        Math.round(base[p].b * 100) !== Math.round(th[p].b * 100) || Math.round(base[p].s * 100) !== Math.round(th[p].s * 100)
-          ? ` → appliqués ${Math.round(th[p].b * 100)} % / ${Math.round(th[p].s * 100)} %` : ""}</span></td>
-      <td class="nowrap">${turn.rising ? `sommet dans ${fmt(turn.toPeak, 0)} t` : `creux dans ${fmt(turn.toTrough, 0)} t`}</td>
-      <td class="nowrap">${fmt(startUnits([p])[p], 0)} u</td>
       <td class="nowrap">${alertGauge(m)}</td>
       <td class="nowrap">${adjText(adj[p])}</td>
     </tr>`);
@@ -794,7 +788,7 @@ function renderDecision() {
       <div><div class="v ${cls}">${fmtSig(v)}</div><div class="a">${act}</div></div></div>`;
   }).join("");
   document.getElementById("justif").innerHTML =
-    `<tr><th>Produit</th><th>Cours actuel</th><th>Seuils achat / vente</th><th>Prochain retournement</th><th>Stock</th><th>Dérive par rapport à la prévision<br><span class="muted">±100 % = alerte</span></th><th>Ajustement de la stratégie</th></tr>`
+    `<tr><th>Produit</th><th>Dérive par rapport à la prévision<br><span class="muted">±100 % = alerte</span></th><th>Ajustement de la stratégie</th></tr>`
     + rows.join("");
   document.getElementById("cycles").innerHTML = gauges.join("");
 }
