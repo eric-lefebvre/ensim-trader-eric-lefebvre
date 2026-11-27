@@ -567,6 +567,15 @@ function renderMarket() {
       for (let t = from; t <= lastT + hor; t++) trend.push({ x: X(t), y: m.trend(t) });
       ds.push(line(p + " tendance", trend, hexA(c, 0.7), { borderDash: [1, 4], borderWidth: 2 }));
     }
+    if (m && thresholdsReady()) { // seuils d'achat / de vente : tranche 1 dans le passé, puis seuils de chaque tranche
+      const thAt = thAtFn(currentPlan(productsOk())), buy = [], sell = [];
+      for (let t = from; t <= lastT + hor; t++) {
+        const z = zones(m, t, thAt(Math.max(1, t - lastT))[p]);
+        buy.push({ x: X(t), y: z.buyAt }); sell.push({ x: X(t), y: z.sellAt });
+      }
+      ds.push(line(p + " seuil d'achat", buy, css("--good"), { borderDash: [6, 4], borderWidth: 1.5 }),
+        line(p + " seuil de vente", sell, css("--bad"), { borderDash: [6, 4], borderWidth: 1.5 }));
+    }
     if (sel !== "ABC" && m) { // un seul produit : bande d'incertitude
       const hi = [], lo = [];
       for (let t = lastT; t <= lastT + hor; t++) { hi.push({ x: X(t), y: m.f(t) + 2 * m.sigma }); lo.push({ x: X(t), y: m.f(t) - 2 * m.sigma }); }
@@ -576,7 +585,9 @@ function renderMarket() {
   }
   document.getElementById("lg-main").innerHTML = ps.map(p => `<span><span class="swatch" style="background:${col(p)}"></span>${p}</span>`).join("")
     + `<span><i class="ln"></i>observé</span><span><i class="ln dash"></i>prévu (zone grisée)</span>`
-    + `<span><i class="ln dot"></i>tendance</span>`;
+    + `<span><i class="ln dot"></i>tendance</span>`
+    + `<span style="color:${css("--good")}"><i class="ln dash"></i></span>seuil d'achat`
+    + `<span style="color:${css("--bad")}"><i class="ln dash"></i></span>seuil de vente`;
   const o = baseOptions("prix");
   o.scales.x.max = X(lastT + hor);
   o.plugins.nowLine = { show: true, x: X(lastT), color: css("--text-secondary"), shade: css("--shade"), label: `maintenant (tick ${X(lastT)})` };
@@ -597,7 +608,7 @@ function buildSimCards() {
       <div class="legend" id="sim-lg-${p}"></div>
       <div class="chart-box tall"><canvas id="c-sim-${p}"></canvas></div>
     </section>`);
-  box.addEventListener("input", () => { renderDecision(); renderSim(); });
+  box.addEventListener("input", () => { renderDecision(); renderMarket(); renderSim(); });
 }
 function renderSim() {
   if (!thresholdsReady() || document.getElementById("tab-sim").hidden) return;
@@ -684,7 +695,7 @@ function applyPlan(plan, sourceTxt) {
     + ps.map(p => models[p].trend(market.history.length - 1 + k * L + 1) <= 0
         ? `<td class="nowrap muted">— (au plancher)</td>`
         : `<td class="nowrap">${Math.round(th[p].b * 100)} / ${Math.round(th[p].s * 100)} %</td>`).join("") + `</tr>`).join("") + `</table>`;
-  renderDecision(); renderSim();
+  renderDecision(); renderMarket(); renderSim();
 }
 
 /* ---------- Chargement ---------- */
@@ -701,7 +712,9 @@ async function load() {
     const H = market.history;
     const date = d => (d ? new Date(d).toLocaleString("fr-FR") : "inconnue");
     document.getElementById("stamp").innerHTML =
-      `Dernière mise à jour de la décision : <b>${date(published?.updated_at)}</b> · Dernière mise à jour du marché : <b>${date(market.generated_at)}</b>`;
+      `Dernière mise à jour de la décision : <b>${date(published?.updated_at)}</b> · Dernière mise à jour du marché : <b>${date(market.generated_at)}</b><br>`
+      + `Dernier tick : <b>n° ${H.at(-1).t}</b> le <b>${date(H.at(-1).timestamp)}</b> · Prochain tick estimé : <b id="next-tick"></b>`;
+    renderNextTick();
     models = {};
     for (const p of market.products) models[p] = fitModel(H.map(r => r[p]));
     buildSimCards();
@@ -723,6 +736,20 @@ async function load() {
     document.getElementById("err").textContent = "Impossible de charger les données : " + e;
   }
 }
+// Temps estimé avant le prochain tick : dernier tick + écart médian des 30 derniers ticks
+function renderNextTick() {
+  const el = document.getElementById("next-tick");
+  if (!market || !el) return;
+  const H = market.history, gaps = [];
+  for (let i = Math.max(1, H.length - 30); i < H.length; i++) gaps.push(new Date(H[i].timestamp) - new Date(H[i - 1].timestamp));
+  gaps.sort((a, b) => a - b);
+  const median = gaps[Math.floor(gaps.length / 2)], next = new Date(new Date(H.at(-1).timestamp).getTime() + median);
+  const left = next - Date.now(), hm = ms => { const m = Math.round(Math.abs(ms) / 60000); return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : `${m} min`; };
+  const at = next.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  el.textContent = left > 0 ? `dans ≈ ${hm(left)} (vers ${at})` : `imminent (attendu vers ${at}, retard de ${hm(left)})`;
+  el.title = `Écart médian entre les 30 derniers ticks : ${hm(median)}`;
+}
+setInterval(renderNextTick, 60000);
 const renderAll = () => { if (!market) return; renderDecision(); renderMarket(); renderSim(); };
 for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => {
   for (const x of document.querySelectorAll(".tabs button")) x.setAttribute("aria-selected", x === b ? "true" : "false");
