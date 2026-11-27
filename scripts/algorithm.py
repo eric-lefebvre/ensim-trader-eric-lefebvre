@@ -42,6 +42,13 @@ MIN_MONEY_RESERVE = 50 # never let a buy signal spend below this much money
 # Aucune règle pour C.
 ALLOC = {"A": (0.20, 0.75), "B": (0.20, 0.75)}
 
+# Seuils optimisés équilibrés : pour B, seuil d'achat et seuil de vente à 10 % près au plus.
+BALANCED = {"B": 0.10}
+
+def grid_mask(p):
+    """Paires (achat, vente) autorisées pour p parmi les 441 de la grille (None = toutes)."""
+    return (np.abs(GRID_S - GRID_B) <= BALANCED[p] + 1e-9) if p in BALANCED else None
+
 def alloc_caps(p, units_p, price, total):
     """(unités achetables, unités vendables) pour respecter la règle d'allocation de p (inf = pas de limite)."""
     if p not in ALLOC:
@@ -221,6 +228,8 @@ def optimize_fixed(ps, pre, money0, units0, T):
     th = {}
     for p in ps:
         v, _, _ = simulate([p], [{p: (0.2, 0.2)}], big, pre, 0, money0, {p: units0[p]}, T, vary=(None, p))
+        if grid_mask(p) is not None:
+            v = np.where(grid_mask(p), v, -np.inf)
         j = int(np.argmax(v))
         th[p] = (float(GRID_B[j]), float(GRID_S[j]))
     best = simulate(ps, [th], big, pre, 0, money0, units0, T)[0][0]
@@ -228,6 +237,8 @@ def optimize_fixed(ps, pre, money0, units0, T):
         improved = False
         for p in ps:
             v, _, _ = simulate(ps, [th], big, pre, 0, money0, units0, T, vary=(None, p))
+            if grid_mask(p) is not None:
+                v = np.where(grid_mask(p), v, -np.inf)
             j = int(np.argmax(v))
             if v[j] > best + 1e-6:
                 best, th[p], improved = float(v[j]), (float(GRID_B[j]), float(GRID_S[j])), True
@@ -253,6 +264,8 @@ def descend(ps, plan, pre, money0, units0, L, dying):
             m_k, u_k = float(m_k[0]), {p: float(u_k[p][0]) for p in ps}
             for p in ps:
                 v, _, _ = simulate(ps, plan, L, pre, k * L, m_k, u_k, T, vary=(k, p))
+                if grid_mask(p) is not None:
+                    v = np.where(grid_mask(p), v, -np.inf)
                 if p in dying:
                     ok = np.ones(len(v), dtype=bool)
                     if k > 0:
@@ -292,25 +305,20 @@ def optimize_blocks(ps, pre, money0, units0, L, nb):
 
 
 def adjust(g):
-    """Ajustement progressif de la stratégie selon la dérive g (±1 = alerte). Renvoie
-    (multiplicateur des quantités achetées, décalage du seuil d'achat, décalage du seuil de vente), en fraction (0,05 = 5 %).
-    Achats et ventes sont décalés ensemble, dans le même sens :
-    - le produit se porte bien (g > 0) : on achète un peu plus tôt (+x %) et on vend un peu plus tard (-x %),
-      x jusqu'à 10 % à g = 0,8, puis x revient à 0 à l'approche d'un pic (g -> 1) : un pic ne déclenche aucun achat imprévu ;
-    - le produit se porte mal (g < 0) : on achète un peu plus tard (-x %) et on vend un peu plus tôt (+x %), x jusqu'à 5 %
-      dans la plage déjà vue sur l'historique (|g| <= 0,8) et jusqu'à 10 % au-delà ; les quantités achetées baissent un peu
-      (jusqu'à -10 %) dans la plage connue, puis fortement (jusqu'à 0) entre 0,8 et l'alerte."""
-    a = abs(g)
-    if g >= 0:
-        x = 0.125 * g if g <= 0.8 else max(0.0, 0.10 * (1 - g) / 0.2)
+    """Ajustement selon la dérive g par rapport à la prévision (±1 = ±100 % = alerte) : chaque tranche de 10 % de dérive
+    décale de 1 % le seuil d'achat et le seuil de vente, dans le même sens. Renvoie (multiplicateur des achats,
+    décalage du seuil d'achat, décalage du seuil de vente), en fraction (0,01 = 1 %).
+    - dérive négative : on achète plus tard (-x) et on vend plus tôt (+x) ; à l'alerte de baisse, achats coupés ;
+    - dérive positive : on achète plus tôt (+x) et on vend plus tard (-x) ; au pic (alerte d'information), aucun
+      décalage, pour qu'un pic ne déclenche jamais d'achat qui n'était pas prévu."""
+    x = 0.10 * min(abs(g), 1.0)
+    if g <= -1:
+        return 0.0, -x, x
+    if g < 0:
+        return 1.0, -x, x
+    if g < 1:
         return 1.0, x, -x
-    if a <= 0.8:
-        x = 0.0625 * a
-        return 1 - 0.125 * a, -x, x
-    if a < 1:
-        x = 0.05 + 0.05 * (a - 0.8) / 0.2
-        return 0.90 * (1 - a) / 0.2, -x, x
-    return 0.0, -0.10, 0.10
+    return 1.0, 0.0, 0.0
 
 
 def next_decision(models, ps, plan, last, money, units, blocked=()):

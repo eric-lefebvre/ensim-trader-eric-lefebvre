@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-27T19:58:03Z",
+  "generated_at": "2026-11-27T20:06:28Z",
   "tick": 387,
   "market_generated_at": "2026-11-27T14:34:35Z",
   "market_commit": "02db61f5dfbdfde3b835a2366a7b19be63f3b164",
@@ -9,39 +9,39 @@
     {
       "A": {
         "buy": 0.75,
-        "sell": 0.8
+        "sell": 0.65
       },
       "B": {
-        "buy": 0.15,
-        "sell": 0.7
+        "buy": 0.05,
+        "sell": 0.15
       },
       "C": {
-        "buy": 0.45,
+        "buy": 0.65,
         "sell": 0.9
       }
     },
     {
       "A": {
         "buy": 0.95,
-        "sell": 1.0
+        "sell": 0.75
       },
       "B": {
-        "buy": 0.15,
-        "sell": 0.65
+        "buy": 0.2,
+        "sell": 0.3
       },
       "C": {
-        "buy": 0.45,
+        "buy": 0.65,
         "sell": 0.9
       }
     },
     {
       "A": {
         "buy": 0.75,
-        "sell": 0.8
+        "sell": 0.65
       },
       "B": {
-        "buy": 0.1,
-        "sell": 0.55
+        "buy": 0.2,
+        "sell": 0.3
       },
       "C": {
         "buy": 0.0,
@@ -60,17 +60,17 @@
     "C": 1.0
   },
   "reasons": {
-    "A": "cours pr\u00e9vu 5.301 >= seuil de vente 5.162",
-    "B": "cours pr\u00e9vu 12.861 >= seuil de vente 12.108",
-    "C": "cours pr\u00e9vu 0.907 <= seuil d'achat 0.927"
+    "A": "cours pr\u00e9vu 5.301 >= seuil de vente 5.261",
+    "B": "cours pr\u00e9vu 12.861 >= seuil de vente 12.686",
+    "C": "cours pr\u00e9vu 0.907 <= seuil d'achat 0.975"
   },
   "alerts": {
     "A": [],
     "B": [],
     "C": []
   },
-  "expected_value": 42943.81,
-  "expected_value_fixed_thresholds": 42833.77,
+  "expected_value": 41811.49,
+  "expected_value_fixed_thresholds": 41498.47,
   "models": {
     "A": {
       "period": 47.75,
@@ -85,8 +85,8 @@
       "shift": 0.0008955537084921007,
       "adjust": {
         "buy_mult": 1.0,
-        "buy_shift": 0.0521735024558782,
-        "sell_shift": -0.0521735024558782
+        "buy_shift": 0.04173880196470256,
+        "sell_shift": -0.04173880196470256
       }
     },
     "B": {
@@ -101,9 +101,9 @@
       "g": -0.793210154776042,
       "shift": -0.005834518931060113,
       "adjust": {
-        "buy_mult": 0.9008487306529948,
-        "buy_shift": -0.04957563467350262,
-        "sell_shift": 0.04957563467350262
+        "buy_mult": 1.0,
+        "buy_shift": -0.0793210154776042,
+        "sell_shift": 0.0793210154776042
       }
     },
     "C": {
@@ -119,10 +119,10 @@
       "shift": 1.259488669321869e-05,
       "adjust": {
         "buy_mult": 1.0,
-        "buy_shift": 0.012699346635456833,
-        "sell_shift": -0.012699346635456833
+        "buy_shift": 0.010159477308365467,
+        "sell_shift": -0.010159477308365467
       }
     }
   },
-  "compute_seconds": 3.1
+  "compute_seconds": 3.9
 }

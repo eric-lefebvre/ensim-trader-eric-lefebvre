@@ -309,14 +309,15 @@ const HALF_LIFE = 96;  // événements récents plus importants (≈ 1 cycle de 
 // Alerte (comme ALERT_HALF_LIFE / ALERT_THRESHOLD dans scripts/algorithm.py) : moyenne pondérée des écarts au modèle
 // sur tout l'historique, les récents pesant beaucoup plus ; seuil calibré pour que le pire tick passé soit à 0,8.
 const ALERT_HALF_LIFE = 8, ALERT_THRESHOLD = 0.79;
-// Ajustement progressif de la stratégie selon la dérive g (±1 = alerte), même règle que adjust() en Python :
-// [multiplicateur des achats, décalage du seuil d'achat, décalage du seuil de vente] ; achats et ventes décalés ensemble
+// Ajustement selon la dérive g par rapport à la prévision (±1 = ±100 % = alerte), même règle que adjust() en Python :
+// chaque tranche de 10 % de dérive décale de 1 % le seuil d'achat et le seuil de vente, dans le même sens.
+// [multiplicateur des achats, décalage du seuil d'achat, décalage du seuil de vente]
 function adjust(g) {
-  const a = Math.abs(g);
-  if (g >= 0) { const x = g <= 0.8 ? 0.125 * g : Math.max(0, 0.10 * (1 - g) / 0.2); return [1, x, -x]; } // va bien : acheter plus tôt, vendre plus tard (pas au pic)
-  if (a <= 0.8) { const x = 0.0625 * a; return [1 - 0.125 * a, -x, x]; }                              // plage déjà vue : effet doux
-  if (a < 1) { const x = 0.05 + 0.05 * (a - 0.8) / 0.2; return [0.90 * (1 - a) / 0.2, -x, x]; }        // jamais vu : achats en forte baisse
-  return [0, -0.10, 0.10];                                                                             // alerte : plus d'achat
+  const x = 0.10 * Math.min(Math.abs(g), 1);
+  if (g <= -1) return [0, -x, x];  // alerte de baisse : achats coupés
+  if (g < 0) return [1, -x, x];    // dérive négative : acheter plus tard, vendre plus tôt
+  if (g < 1) return [1, x, -x];    // dérive positive : acheter plus tôt, vendre plus tard
+  return [1, 0, 0];                // pic : information seulement, aucun décalage
 }
 function fitModel(y, halfLife = HALF_LIFE) {
   const n = y.length;
@@ -482,6 +483,7 @@ function optimizeThresholds(T) {
   for (const p of ps) {
     let best = null;
     for (const b of grid) for (const s of grid) {
+          if (unbalanced(p, b, s)) continue;
       const v = simulateJoint([p], { [p]: { b, s } }, lastT, money0, { [p]: units0[p] }, T, false, pre).value;
       if (!best || v > best.v + 1e-9) best = { v, b, s };
     }
@@ -491,6 +493,7 @@ function optimizeThresholds(T) {
   for (let round = 0; round < 4; round++) {
     let improved = false;
     for (const p of ps) for (const b of grid) for (const s of grid) {
+          if (unbalanced(p, b, s)) continue;
       const trial = { ...th, [p]: { b, s } };
       const v = simulateJoint(ps, trial, lastT, money0, units0, T, false, pre).value;
       if (v > bestV + 1e-6) { bestV = v; th[p] = { b, s }; improved = true; }
@@ -541,6 +544,7 @@ function descendPlan(ps, start, pre, money0, units0, L, dying) {
         const keep = plan[k][p], prev = k > 0 ? plan[k - 1][p] : null, next = k < nb - 1 ? plan[k + 1][p] : null;
         let cand = null, candV = -Infinity;
         for (const b of grid) for (const s of grid) {
+          if (unbalanced(p, b, s)) continue;
           if (dying.has(p) && ((prev && (b > prev.b + 1e-9 || s < prev.s - 1e-9)) || (next && (b < next.b - 1e-9 || s > next.s + 1e-9)))) continue;
           plan[k][p] = { b, s };
           const v = simFrom(ps, plan, pre, k * L, st.money, st.units, Ttot).value;
@@ -588,6 +592,9 @@ const MIN_MONEY_RESERVE = 50;
 const ALLOC = { A: [0.20, 0.75], B: [0.20, 0.75] };
 const allocBuyCap = (p, u, pr, tot) => ALLOC[p] ? Math.max(0, (ALLOC[p][1] * tot - u * pr) / pr) : Infinity;
 const allocSellCap = (p, u, pr, tot) => ALLOC[p] ? Math.max(0, (u * pr - ALLOC[p][0] * tot) / pr) : Infinity;
+// Seuils optimisés équilibrés (comme BALANCED en Python) : pour B, achat et vente à 10 % près au plus
+const BALANCED = { B: 0.10 };
+const unbalanced = (p, b, s) => p in BALANCED && Math.abs(s - b) > BALANCED[p] + 1e-9;
 function applyBudgetGuard(raw, money, price, reserve = MIN_MONEY_RESERVE) {
   if (raw <= 0) return raw;
   if (money <= reserve) return 0;
