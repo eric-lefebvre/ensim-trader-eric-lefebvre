@@ -100,6 +100,7 @@ th { color: var(--text-secondary); font-weight: 500; }
 @media (max-width: 700px) { .decision { grid-template-columns: 1fr; } }
 .dec { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 16px; }
 .dec .p { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.kpis[hidden] { display: none; }
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0 0 16px; }
 @media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } }
@@ -191,7 +192,7 @@ tr.base td { color: var(--text-muted); font-style: italic; }
   </div>
 </header>
 <main>
-  <div class="kpis">
+  <div class="kpis" id="top-kpis">
     <div class="card kpi money" style="margin:0"><div class="l">Mon argent actuel (argent + stocks × prix)</div><div class="n" id="k-val">…</div>
       <div class="chg" id="k-val-1"></div><div class="chg" id="k-val-10"></div><div class="d" id="k-val-d"></div></div>
     <div class="card kpi" style="margin:0"><div class="l">Depuis le dernier tick</div><div class="n" id="k-since">…</div><div class="d" id="k-since-d"></div></div>
@@ -1225,6 +1226,7 @@ function showPage() {
   document.getElementById("tab-main").hidden = page !== "main";
   document.getElementById("tab-sim").hidden = page !== "sim";
   document.getElementById("tab-rank").hidden = page !== "rank";
+  document.getElementById("top-kpis").hidden = page !== "main"; // les 4 grands chiffres : page Décision seulement
   window.scrollTo(0, 0);
   if (market) page === "sim" ? renderSim() : page === "rank" ? renderRanking() : (renderMarket(), renderPortfolio());
 }
